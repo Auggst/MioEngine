@@ -26,12 +26,18 @@ private:
     VkResult initWindow();
     VkResult initVulkan();
     VkResult initInstance();
+    std::vector<const char*> getRequiredExtensions();
+    bool checkValidationLayerSupport();
+    void getSupportedExtensions();
+    void setupDebugMessenger();
     void mainLoop();
     void cleanup();
 //字段
 private:
     GLFWwindow* m_window;
+    VkDebugUtilsMessengerEXT m_debugMessenger;
     std::vector<VkInstance> m_instances;
+    std::vector<VkExtensionProperties> m_extensions;
     std::vector<VkPhysicalDevice> m_physicalDevices; 
     std::vector<VkDevice> m_logicalDevice;
 
