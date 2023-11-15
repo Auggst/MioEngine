@@ -20,8 +20,6 @@ public:
     MioEngine();
     ~MioEngine();
     void run();
-    VkResult init();
-
 private:
     VkResult initWindow();
     VkResult initVulkan();
@@ -33,6 +31,7 @@ private:
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
     void setupDebugMessenger();
     void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
+    void pickPhysicalDevice();
     void mainLoop();
     void cleanup();
 //字段

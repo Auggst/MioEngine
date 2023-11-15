@@ -45,7 +45,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 
 EngineCore::MioEngine::MioEngine(){
     m_instances = std::vector<VkInstance>();
-    m_instances.reserve(1);
+    m_instances.reserve(1); //暂时默认只有一个实例
+    m_physicalDevices = std::vector<VkPhysicalDevice>();
 }
 
 EngineCore::MioEngine::~MioEngine(){
@@ -86,7 +87,11 @@ VkResult EngineCore::MioEngine::initVulkan(){
         throw std::runtime_error("Failed to initialize Vulkan instance.");
     }
 
+    //设置调试信使
     setupDebugMessenger();
+
+    //选取物理设备
+    pickPhysicalDevice();
 
     return result;
 }
@@ -261,9 +266,6 @@ void EngineCore::MioEngine::getSupportedExtensions(){
 #endif
 }
 
-
-
-
 /**
  * 为EngineCore的MioEngine类填充调试信使创建信息。
  *
@@ -300,6 +302,7 @@ void EngineCore::MioEngine::setupDebugMessenger() {
     }
 }
 
+
 /**
  * 销毁调试工具信使扩展。
  *
@@ -314,6 +317,35 @@ void EngineCore::MioEngine::DestroyDebugUtilsMessengerEXT(VkInstance instance, V
     if (func != nullptr) {
         func(instance, debugMessenger, pAllocator);
     }
+}
+
+
+void EngineCore::MioEngine::pickPhysicalDevice(){
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(m_instances.front(), &deviceCount, nullptr);
+    if (deviceCount == 0) {
+        throw std::runtime_error("failed to find GPUs with Vulkan support!");
+    }
+
+    //遍历所有可用的GPU后，写入m_physicalDevices
+    m_physicalDevices.reserve(deviceCount);
+    vkEnumeratePhysicalDevices(m_instances.front(), &deviceCount, m_physicalDevices.data());
+
+    for(const auto& device: m_physicalDevices){
+        if (isDeviceSuitable(device)){
+            physicalDevice = device;
+            break;
+        }
+    }
+
+    if (physicalDevice == VK_NULL_HANDLE) {
+        throw std::runtime_error("failed to find a suitable GPU!");
+    }
+}
+
+bool isDeviceSuitable(VkPhysicalDevice device){
+    return true;
 }
 
 void EngineCore::MioEngine::mainLoop(){
