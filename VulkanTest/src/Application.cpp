@@ -20,6 +20,29 @@ const std::vector<const char*> validationLayers = {
     const bool enableValidationLayers = true;
 #endif
 
+/**
+ * 一个处理来自Vulkan API的调试消息的回调函数。
+ *
+ * @param messageSeverity 调试消息的严重程度级别。
+ * @param messageType 调试消息的类型。
+ * @param pCallbackData 指向调试消息数据的指针。
+ * @param pUserData 指向用户数据的指针。
+ *
+ * @return VK_FALSE 表示调试回调不会中止Vulkan函数调用。
+ *
+ * @throws 无。
+ */
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT messageType,
+    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+    void* pUserData) {
+
+    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+
+    return VK_FALSE;
+}
+
 EngineCore::MioEngine::MioEngine(){
     m_instances = std::vector<VkInstance>();
     m_instances.reserve(1);
@@ -104,12 +127,17 @@ VkResult EngineCore::MioEngine::initInstance() {
     instanceInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     instanceInfo.ppEnabledExtensionNames = extensions.data();
 
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     //在实例信息里设置验证层
     if (enableValidationLayers) {
         instanceInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         instanceInfo.ppEnabledLayerNames = validationLayers.data();
+
+        populateDebugMessengerCreateInfo(debugCreateInfo);
+        instanceInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
     } else {
         instanceInfo.enabledLayerCount = 0;
+        instanceInfo.pNext = nullptr;
     }
     
     //创建Vulkan实例
@@ -121,6 +149,27 @@ VkResult EngineCore::MioEngine::initInstance() {
     }
 
     return result;
+}
+
+/**
+ * 创建一个用于 Vulkan 实例的调试工具信使。
+ *
+ * @param instance Vulkan 实例。
+ * @param pCreateInfo 指向包含调试工具信使创建信息的结构体。
+ * @param pAllocator 指向分配器回调结构体的指针。
+ * @param pDebugMessenger 指向调试工具信使句柄的指针。
+ *
+ * @return VkResult 调试工具信使创建的结果。
+ *
+ * @throws None
+ */
+VkResult EngineCore::MioEngine::CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger){
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+    } else {
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
 }
 
 /**
@@ -212,38 +261,77 @@ void EngineCore::MioEngine::getSupportedExtensions(){
 #endif
 }
 
+
+
+
+/**
+ * 为EngineCore的MioEngine类填充调试信使创建信息。
+ *
+ * @param createInfo 要填充的VkDebugUtilsMessengerCreateInfoEXT对象的引用。
+ *
+ * @return void
+ *
+ * @throws None
+ */
+void EngineCore::MioEngine::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+        createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+        createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+        createInfo.pfnUserCallback = debugCallback;
+}
+
+/**
+ * 设置调试信使函数，用于在EngineCore类中的MioEngine中设置调试消息处理。
+ * 该函数负责创建Vulkan API中处理调试消息所需的结构体和回调函数。
+ *
+ * @throws std::runtime_error 如果调试信使设置失败。
+ */
+void EngineCore::MioEngine::setupDebugMessenger() {
+    if (!enableValidationLayers) return;
+
+    VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
+    populateDebugMessengerCreateInfo(createInfo);
+
+    for(const auto& instance: m_instances){
+        if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &m_debugMessenger) != VK_SUCCESS) {
+            throw std::runtime_error("failed to set up debug messenger!");
+        }
+    }
+}
+
+/**
+ * 销毁调试工具信使扩展。
+ *
+ * @param instance Vulkan实例。
+ * @param debugMessenger 要销毁的调试信使。
+ * @param pAllocator 分配回调。
+ *
+ * @throws ErrorType 错误的描述。
+ */
+void EngineCore::MioEngine::DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator){
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        func(instance, debugMessenger, pAllocator);
+    }
+}
+
 void EngineCore::MioEngine::mainLoop(){
     while(!glfwWindowShouldClose(m_window)){
         glfwPollEvents();
     }
 }
 
-
-static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData) {
-
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
-
-    return VK_FALSE;
-}
-
-void EngineCore::MioEngine::setupDebugMessenger() {
-    if (!enableValidationLayers) return;
-    VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo.pfnUserCallback = debugCallback;
-    createInfo.pUserData = nullptr;
-}
-
 void EngineCore::MioEngine::cleanup(){
     //清理Vulkan实例
     if (!m_instances.empty()){
         for (const auto& instance : m_instances){
+            if (enableValidationLayers) {
+                //清理调试信使    
+                DestroyDebugUtilsMessengerEXT(m_instances.front(), m_debugMessenger, nullptr);  
+            }
+            
+            //清理Vulkan实例
             vkDestroyInstance(instance, nullptr);
         }
         m_instances.clear();

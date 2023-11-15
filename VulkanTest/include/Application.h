@@ -26,10 +26,13 @@ private:
     VkResult initWindow();
     VkResult initVulkan();
     VkResult initInstance();
+    VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger); 
     std::vector<const char*> getRequiredExtensions();
     bool checkValidationLayerSupport();
     void getSupportedExtensions();
+    void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
     void setupDebugMessenger();
+    void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
     void mainLoop();
     void cleanup();
 //字段
