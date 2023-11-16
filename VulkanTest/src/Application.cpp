@@ -8,6 +8,7 @@
 #include <glm/mat4x4.hpp>
 
 #include <format>
+#include <map>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -332,20 +333,66 @@ void EngineCore::MioEngine::pickPhysicalDevice(){
     m_physicalDevices.reserve(deviceCount);
     vkEnumeratePhysicalDevices(m_instances.front(), &deviceCount, m_physicalDevices.data());
 
+    std::multimap<int, VkPhysicalDevice> candidates;
+
     for(const auto& device: m_physicalDevices){
         if (isDeviceSuitable(device)){
+            int score = rateDeviceSuitability(device);
+            candidates.insert(std::make_pair(score, device));
             physicalDevice = device;
             break;
         }
     }
 
-    if (physicalDevice == VK_NULL_HANDLE) {
+    //检查是否有合适的GPU  
+    if (candidates.rbegin()->first > 0) {
+        physicalDevice = candidates.rbegin()->second;
+    } else {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
 }
 
+/**
+ * 评估给定的 Vulkan 物理设备的适用性。
+ *
+ * @param device 要评估的 Vulkan 物理设备。
+ *
+ * @return 表示设备适用性的分数。
+ *
+ * @throws None
+ */
+int rateDeviceSuitability(VkPhysicalDevice device){
+    int score = 0;
+
+    VkPhysicalDeviceProperties deviceProperties;
+    vkGetPhysicalDeviceProperties(device, &deviceProperties);
+    if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+        score += 1000;
+    }
+    VkPhysicalDeviceFeatures deviceFeatures;
+    vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+    if (deviceFeatures.geometryShader) {
+        score += 1000;
+    }
+    return score;
+}
+
+/**
+ * 确定给定的物理设备是否适用于使用。
+ *
+ * @param device 要检查的物理设备
+ *
+ * @return 如果设备适用，则为true；否则为false
+ *
+ * @throws None
+ */
 bool isDeviceSuitable(VkPhysicalDevice device){
-    return true;
+    VkPhysicalDeviceProperties deviceProperties;
+    vkGetPhysicalDeviceProperties(device, &deviceProperties);
+    VkPhysicalDeviceFeatures deviceFeatures;
+    vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+    //独立显卡且支持几何着色器
+    return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && deviceFeatures.geometryShader;
 }
 
 void EngineCore::MioEngine::mainLoop(){
