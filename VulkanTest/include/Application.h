@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <optional>
 
 #include <vulkan/vulkan.h>
 #define GLFW_INCLUDE_VULKAN
@@ -12,6 +13,15 @@
 namespace EngineCore{
 struct MioInfo{
     std::string name;
+};
+
+struct QueueFamilyIndices {
+    std::optional<uint32_t> graphicsFamily = -1;
+    std::optional<uint32_t> presentFamily = -1;
+
+    bool isComplete() {
+        return graphicsFamily.has_value();
+    }
 };
 
 class MioEngine{
@@ -27,6 +37,8 @@ private:
     VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger); 
     std::vector<const char*> getRequiredExtensions();
     bool checkValidationLayerSupport();
+    bool isDeviceSuitable(VkPhysicalDevice device);
+    QueueFamilyIndices findQueueFamily(VkPhysicalDevice device);
     void getSupportedExtensions();
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
     void setupDebugMessenger();

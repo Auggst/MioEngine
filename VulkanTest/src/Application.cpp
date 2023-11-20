@@ -66,6 +66,15 @@ void EngineCore::MioEngine::run(){
     cleanup();
 }
 
+/**
+ * 初始化窗口。
+ *
+ * 该函数用于初始化窗口，包括初始化GLFW库、设置窗口属性等操作。
+ *
+ * @throws ErrorType 如果在初始化窗口过程中出现错误。
+ *
+ * @return Vulkan结果代码
+ */
 VkResult EngineCore::MioEngine::initWindow(){
     glfwInit(); //初始化GLFW库
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); //声明并非创建OpenGL的context
@@ -79,6 +88,15 @@ VkResult EngineCore::MioEngine::initWindow(){
     return VK_SUCCESS;
 }
 
+/**
+ * 初始化Vulkan相关设置。
+ *
+ * 该函数用于初始化Vulkan相关设置，包括创建Vulkan实例、选择物理设备、创建逻辑设备等。
+ *
+ * @throws ErrorType 如果在初始化Vulkan过程中出现错误。
+ *
+ * @return void
+ */
 VkResult EngineCore::MioEngine::initVulkan(){
     auto result = VK_SUCCESS;
 
@@ -248,6 +266,46 @@ bool EngineCore::MioEngine::checkValidationLayerSupport(){
 }
 
 /**
+ * 确定给定的物理设备是否适用于使用。
+ *
+ * @param device 要检查的物理设备
+ *
+ * @return 如果设备适用，则为true；否则为false
+ *
+ * @throws None
+ */
+bool EngineCore::MioEngine::isDeviceSuitable(VkPhysicalDevice device){
+    EngineCore::QueueFamilyIndices indices = findQueueFamily(device);
+
+    //独立显卡且支持几何着色器
+    return indices.isComplete();
+}
+
+
+EngineCore::QueueFamilyIndices EngineCore::MioEngine::findQueueFamily(VkPhysicalDevice device){
+    QueueFamilyIndices indices;
+
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+    int i = 0;
+    for (const auto& queueFamily : queueFamilies) {
+        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+            indices.graphicsFamily = i;
+        }
+        if (indices.isComplete()) {
+            break;
+        }
+        i++;
+    }
+
+    return indices;
+}
+
+/**
  * 获取 EngineCore 类中 MioEngine 的受支持扩展。
  *
  * @return void
@@ -320,7 +378,13 @@ void EngineCore::MioEngine::DestroyDebugUtilsMessengerEXT(VkInstance instance, V
     }
 }
 
-
+/**
+ * 选择适合的物理设备用于 EngineCore 的 MioEngine。
+ *
+ * @throws std::runtime_error 如果找不到支持 Vulkan 的 GPU
+ *
+ * @return void
+ */
 void EngineCore::MioEngine::pickPhysicalDevice(){
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     uint32_t deviceCount = 0;
@@ -377,30 +441,31 @@ int rateDeviceSuitability(VkPhysicalDevice device){
     return score;
 }
 
-/**
- * 确定给定的物理设备是否适用于使用。
- *
- * @param device 要检查的物理设备
- *
- * @return 如果设备适用，则为true；否则为false
- *
- * @throws None
- */
-bool isDeviceSuitable(VkPhysicalDevice device){
-    VkPhysicalDeviceProperties deviceProperties;
-    vkGetPhysicalDeviceProperties(device, &deviceProperties);
-    VkPhysicalDeviceFeatures deviceFeatures;
-    vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-    //独立显卡且支持几何着色器
-    return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && deviceFeatures.geometryShader;
-}
 
+/**
+ * 主循环函数。
+ *
+ * 该函数用于执行引擎核心的主循环。
+ *
+ * @throws ErrorType 如果在主循环过程中出现错误。
+ *
+ * @return void
+ */
 void EngineCore::MioEngine::mainLoop(){
     while(!glfwWindowShouldClose(m_window)){
         glfwPollEvents();
     }
 }
 
+/**
+ * 清理引擎核心的MioEngine。
+ *
+ * 该函数用于清理引擎核心中的MioEngine。
+ *
+ * @throws ErrorType 如果在清理过程中出现错误。
+ *
+ * @return void
+ */
 void EngineCore::MioEngine::cleanup(){
     //清理Vulkan实例
     if (!m_instances.empty()){
