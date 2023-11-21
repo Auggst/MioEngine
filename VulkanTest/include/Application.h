@@ -20,7 +20,7 @@ struct QueueFamilyIndices {
     std::optional<uint32_t> presentFamily = -1;
 
     bool isComplete() {
-        return graphicsFamily.has_value();
+        return graphicsFamily.has_value() && presentFamily.has_value();
     }
 };
 
@@ -33,8 +33,8 @@ public:
 private:
     VkResult initWindow();
     VkResult initVulkan();
-    VkResult initInstance();
-    VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger); 
+    void createInstance();
+    VkResult createDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger); 
     std::vector<const char*> getRequiredExtensions();
     bool checkValidationLayerSupport();
     bool isDeviceSuitable(VkPhysicalDevice device);
@@ -43,17 +43,22 @@ private:
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
     void setupDebugMessenger();
     void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
+    void createSurface();
     void pickPhysicalDevice();
+    void createLogicalDevice();
     void mainLoop();
     void cleanup();
 //字段
 private:
     GLFWwindow* m_window;
     VkDebugUtilsMessengerEXT m_debugMessenger;
+    VkSurfaceKHR m_surface;
+    VkQueue presentQueue;
     std::vector<VkInstance> m_instances;
     std::vector<VkExtensionProperties> m_extensions;
     std::vector<VkPhysicalDevice> m_physicalDevices; 
     std::vector<VkDevice> m_logicalDevice;
+    std::vector<VkQueue> m_graphicsQueue;
 
 };
 

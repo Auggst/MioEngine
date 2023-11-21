@@ -1,6 +1,10 @@
 #include "Application.h"
+
+#define VK_USE_PLATFORM_WIN32_KHR
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -9,6 +13,7 @@
 
 #include <format>
 #include <map>
+#include <set>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -48,6 +53,9 @@ EngineCore::MioEngine::MioEngine(){
     m_instances = std::vector<VkInstance>();
     m_instances.reserve(1); //暂时默认只有一个实例
     m_physicalDevices = std::vector<VkPhysicalDevice>();
+    m_physicalDevices.reserve(3);
+    m_graphicsQueue = std::vector<VkQueue>();
+    m_graphicsQueue.reserve(1);
 }
 
 EngineCore::MioEngine::~MioEngine(){
@@ -101,16 +109,19 @@ VkResult EngineCore::MioEngine::initVulkan(){
     auto result = VK_SUCCESS;
 
     //初始化Vulkan实例
-    result = initInstance();
-    if (result != VK_SUCCESS) {
-        throw std::runtime_error("Failed to initialize Vulkan instance.");
-    }
+    createInstance();
 
     //设置调试信使
     setupDebugMessenger();
 
+    //创建显示窗口
+    createSurface();
+
     //选取物理设备
     pickPhysicalDevice();
+
+    //创建逻辑设备
+    createLogicalDevice();
 
     return result;
 }
@@ -123,7 +134,7 @@ VkResult EngineCore::MioEngine::initVulkan(){
  * @throws std::runtime_error 如果硬件不支持所需的GLFW扩展。
  * @throws std::runtime_error 如果硬件不支持所需的扩展。
  */
-VkResult EngineCore::MioEngine::initInstance() {
+void EngineCore::MioEngine::createInstance() {
     VkResult result = VK_SUCCESS;
     //检查是否支持验证层
     if (enableValidationLayers && !checkValidationLayerSupport()) {
@@ -171,8 +182,6 @@ VkResult EngineCore::MioEngine::initInstance() {
     if (result == VK_ERROR_EXTENSION_NOT_PRESENT) {
         throw std::runtime_error("Hardware does not support desired extensions.");
     }
-
-    return result;
 }
 
 /**
@@ -187,7 +196,7 @@ VkResult EngineCore::MioEngine::initInstance() {
  *
  * @throws None
  */
-VkResult EngineCore::MioEngine::CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger){
+VkResult EngineCore::MioEngine::createDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger){
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
@@ -277,11 +286,26 @@ bool EngineCore::MioEngine::checkValidationLayerSupport(){
 bool EngineCore::MioEngine::isDeviceSuitable(VkPhysicalDevice device){
     EngineCore::QueueFamilyIndices indices = findQueueFamily(device);
 
+    VkBool32 presentSupport = false;
+    uint32_t i = -1;
+    vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &presentSupport);
+    if (presentSupport) {
+        indices.presentFamily = i;
+    }
+
     //独立显卡且支持几何着色器
     return indices.isComplete();
 }
 
-
+/**
+ * 查找给定的 Vulkan 物理设备的队列族索引。
+ *
+ * @param device 要查找队列族索引的 Vulkan 物理设备。
+ *
+ * @return 指定的 Vulkan 物理设备的队列族索引。
+ *
+ * @throws 无
+ */
 EngineCore::QueueFamilyIndices EngineCore::MioEngine::findQueueFamily(VkPhysicalDevice device){
     QueueFamilyIndices indices;
 
@@ -355,7 +379,7 @@ void EngineCore::MioEngine::setupDebugMessenger() {
     populateDebugMessengerCreateInfo(createInfo);
 
     for(const auto& instance: m_instances){
-        if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &m_debugMessenger) != VK_SUCCESS) {
+        if (createDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &m_debugMessenger) != VK_SUCCESS) {
             throw std::runtime_error("failed to set up debug messenger!");
         }
     }
@@ -375,6 +399,12 @@ void EngineCore::MioEngine::DestroyDebugUtilsMessengerEXT(VkInstance instance, V
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr) {
         func(instance, debugMessenger, pAllocator);
+    }
+}
+
+void EngineCore::MioEngine::createSurface() {
+    if (glfwCreateWindowSurface(m_instances.front(), m_window, nullptr, &m_surface) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create window surface!");
     }
 }
 
@@ -414,6 +444,61 @@ void EngineCore::MioEngine::pickPhysicalDevice(){
     } else {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
+}
+
+/**
+ * 创建逻辑设备。
+ *
+ * @param None
+ *
+ * @return None
+ *
+ * @throws std::runtime_error 如果逻辑设备创建失败
+ */
+void EngineCore::MioEngine::createLogicalDevice(){
+    QueueFamilyIndices indices = findQueueFamily(m_physicalDevices.front());
+
+    //设备队列创建信息
+    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+    std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
+
+    float queuePriority = 1.0f;  //队列优先级，影响执行顺序
+    for (uint32_t queueFamily : uniqueQueueFamilies) {
+        VkDeviceQueueCreateInfo queueCreateInfo{};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = queueFamily;
+        queueCreateInfo.queueCount = 1;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+        queueCreateInfos.push_back(queueCreateInfo);
+    }
+
+    //设备支持的特征，在选物理设备时已经指定
+    VkPhysicalDeviceFeatures deviceFeatures{};
+
+    //设备创建信息
+    VkDeviceCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+    createInfo.pQueueCreateInfos = queueCreateInfos.data();
+
+    createInfo.pEnabledFeatures = &deviceFeatures;
+
+    createInfo.enabledExtensionCount = 0;
+    if (enableValidationLayers) {
+        createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+        createInfo.ppEnabledLayerNames = validationLayers.data();
+    } else {
+        createInfo.enabledLayerCount = 0;
+    }
+
+    //创建逻辑设备
+    if (vkCreateDevice(m_physicalDevices.front(), &createInfo, nullptr, &m_logicalDevice.front()) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create logical device!");
+    }
+    
+    //创建设备队列
+    vkGetDeviceQueue(m_logicalDevice.front(), indices.graphicsFamily.value(), 0, &m_graphicsQueue.front());
+    vkGetDeviceQueue(m_logicalDevice.front(), indices.presentFamily.value(), 0, &presentQueue);
 }
 
 /**
@@ -467,6 +552,13 @@ void EngineCore::MioEngine::mainLoop(){
  * @return void
  */
 void EngineCore::MioEngine::cleanup(){
+    //清理逻辑设备
+    if (!m_logicalDevice.empty()){
+        for (const auto& device : m_logicalDevice){
+            vkDestroyDevice(device, nullptr);
+        }
+    }
+
     //清理Vulkan实例
     if (!m_instances.empty()){
         for (const auto& instance : m_instances){
@@ -475,6 +567,8 @@ void EngineCore::MioEngine::cleanup(){
                 DestroyDebugUtilsMessengerEXT(m_instances.front(), m_debugMessenger, nullptr);  
             }
             
+            //清理显示窗口
+            vkDestroySurfaceKHR(instance, m_surface, nullptr);
             //清理Vulkan实例
             vkDestroyInstance(instance, nullptr);
         }
