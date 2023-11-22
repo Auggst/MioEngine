@@ -37,8 +37,10 @@ private:
     VkResult createDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger); 
     std::vector<const char*> getRequiredExtensions();
     bool checkValidationLayerSupport();
+    bool checkDeviceExtensionSupport(VkPhysicalDevice device);
     bool isDeviceSuitable(VkPhysicalDevice device);
     QueueFamilyIndices findQueueFamily(VkPhysicalDevice device);
+    int rateDeviceSuitability(VkPhysicalDevice device);
     void getSupportedExtensions();
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
     void setupDebugMessenger();
@@ -54,7 +56,7 @@ private:
     VkDebugUtilsMessengerEXT m_debugMessenger;
     VkSurfaceKHR m_surface;
     VkQueue presentQueue;
-    std::vector<VkInstance> m_instances;
+    VkInstance m_instances;
     std::vector<VkExtensionProperties> m_extensions;
     std::vector<VkPhysicalDevice> m_physicalDevices; 
     std::vector<VkDevice> m_logicalDevice;

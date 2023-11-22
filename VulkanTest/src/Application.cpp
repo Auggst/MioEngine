@@ -20,6 +20,9 @@ const uint32_t HEIGHT = 600;
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
 };
+const std::vector<const char*> deviceExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
 #ifdef NDEBUG
     const bool enableValidationLayers = false;
 #else
@@ -50,8 +53,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 }
 
 EngineCore::MioEngine::MioEngine(){
-    m_instances = std::vector<VkInstance>();
-    m_instances.reserve(1); //暂时默认只有一个实例
     m_physicalDevices = std::vector<VkPhysicalDevice>();
     m_physicalDevices.reserve(3);
     m_graphicsQueue = std::vector<VkQueue>();
@@ -176,7 +177,7 @@ void EngineCore::MioEngine::createInstance() {
     }
     
     //创建Vulkan实例
-    result = vkCreateInstance(&instanceInfo, nullptr, m_instances.data());
+    result = vkCreateInstance(&instanceInfo, nullptr, &m_instances);
     
     //检查Vulkan实例是否创建成功
     if (result == VK_ERROR_EXTENSION_NOT_PRESENT) {
@@ -274,6 +275,22 @@ bool EngineCore::MioEngine::checkValidationLayerSupport(){
     return true;
 }
 
+bool EngineCore::MioEngine::checkDeviceExtensionSupport(VkPhysicalDevice device){
+    uint32_t extensionCount;
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+    std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+    for (const auto& extension : availableExtensions) {
+        requiredExtensions.erase(extension.extensionName);
+    }
+
+    return requiredExtensions.empty();
+}
+
 /**
  * 确定给定的物理设备是否适用于使用。
  *
@@ -293,8 +310,10 @@ bool EngineCore::MioEngine::isDeviceSuitable(VkPhysicalDevice device){
         indices.presentFamily = i;
     }
 
+    bool extensionsSupported = checkDeviceExtensionSupport(device);
+
     //独立显卡且支持几何着色器
-    return indices.isComplete();
+    return indices.isComplete() && extensionsSupported;
 }
 
 /**
@@ -378,10 +397,9 @@ void EngineCore::MioEngine::setupDebugMessenger() {
     VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
     populateDebugMessengerCreateInfo(createInfo);
 
-    for(const auto& instance: m_instances){
-        if (createDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &m_debugMessenger) != VK_SUCCESS) {
-            throw std::runtime_error("failed to set up debug messenger!");
-        }
+    if (createDebugUtilsMessengerEXT(m_instances, &createInfo, nullptr, &m_debugMessenger) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to set up debug messenger!");
     }
 }
 
@@ -403,7 +421,8 @@ void EngineCore::MioEngine::DestroyDebugUtilsMessengerEXT(VkInstance instance, V
 }
 
 void EngineCore::MioEngine::createSurface() {
-    if (glfwCreateWindowSurface(m_instances.front(), m_window, nullptr, &m_surface) != VK_SUCCESS) {
+    if (glfwCreateWindowSurface(m_instances, m_window, nullptr, &m_surface) != VK_SUCCESS)
+    {
         throw std::runtime_error("failed to create window surface!");
     }
 }
@@ -418,14 +437,14 @@ void EngineCore::MioEngine::createSurface() {
 void EngineCore::MioEngine::pickPhysicalDevice(){
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(m_instances.front(), &deviceCount, nullptr);
-    if (deviceCount == 0) {
+    vkEnumeratePhysicalDevices(m_instances, &deviceCount, nullptr);
+    if (deviceCount == 0)
+    {
         throw std::runtime_error("failed to find GPUs with Vulkan support!");
     }
-
-    //遍历所有可用的GPU后，写入m_physicalDevices
+    // 遍历所有可用的GPU后，写入m_physicalDevices
     m_physicalDevices.reserve(deviceCount);
-    vkEnumeratePhysicalDevices(m_instances.front(), &deviceCount, m_physicalDevices.data());
+    vkEnumeratePhysicalDevices(m_instances, &deviceCount, m_physicalDevices.data());
 
     std::multimap<int, VkPhysicalDevice> candidates;
 
@@ -510,7 +529,7 @@ void EngineCore::MioEngine::createLogicalDevice(){
  *
  * @throws None
  */
-int rateDeviceSuitability(VkPhysicalDevice device){
+int EngineCore::MioEngine::rateDeviceSuitability(VkPhysicalDevice device){
     int score = 0;
 
     VkPhysicalDeviceProperties deviceProperties;
@@ -560,20 +579,16 @@ void EngineCore::MioEngine::cleanup(){
     }
 
     //清理Vulkan实例
-    if (!m_instances.empty()){
-        for (const auto& instance : m_instances){
-            if (enableValidationLayers) {
-                //清理调试信使    
-                DestroyDebugUtilsMessengerEXT(m_instances.front(), m_debugMessenger, nullptr);  
-            }
-            
-            //清理显示窗口
-            vkDestroySurfaceKHR(instance, m_surface, nullptr);
-            //清理Vulkan实例
-            vkDestroyInstance(instance, nullptr);
-        }
-        m_instances.clear();
+    if (enableValidationLayers)
+    {
+        // 清理调试信使
+        DestroyDebugUtilsMessengerEXT(m_instances, m_debugMessenger, nullptr);
     }
+
+    // 清理显示窗口
+    vkDestroySurfaceKHR(m_instances, m_surface, nullptr);
+    // 清理Vulkan实例
+    vkDestroyInstance(m_instances, nullptr);
 
     //清理GLFW
     glfwDestroyWindow(m_window);
