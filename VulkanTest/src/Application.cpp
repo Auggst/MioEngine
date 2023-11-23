@@ -54,9 +54,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 
 EngineCore::MioEngine::MioEngine(){
     m_physicalDevices = std::vector<VkPhysicalDevice>();
-    m_physicalDevices.reserve(3);
-    m_graphicsQueue = std::vector<VkQueue>();
-    m_graphicsQueue.reserve(1);
+    m_physicalDevices.reserve(1);
 }
 
 EngineCore::MioEngine::~MioEngine(){
@@ -303,13 +301,6 @@ bool EngineCore::MioEngine::checkDeviceExtensionSupport(VkPhysicalDevice device)
 bool EngineCore::MioEngine::isDeviceSuitable(VkPhysicalDevice device){
     EngineCore::QueueFamilyIndices indices = findQueueFamily(device);
 
-    VkBool32 presentSupport = false;
-    uint32_t i = -1;
-    vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &presentSupport);
-    if (presentSupport) {
-        indices.presentFamily = i;
-    }
-
     bool extensionsSupported = checkDeviceExtensionSupport(device);
 
     //独立显卡且支持几何着色器
@@ -339,6 +330,13 @@ EngineCore::QueueFamilyIndices EngineCore::MioEngine::findQueueFamily(VkPhysical
         if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             indices.graphicsFamily = i;
         }
+        VkBool32 presentSupport = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &presentSupport);
+
+        if (presentSupport) {
+            indices.presentFamily = i;
+        }
+
         if (indices.isComplete()) {
             break;
         }
@@ -435,7 +433,7 @@ void EngineCore::MioEngine::createSurface() {
  * @return void
  */
 void EngineCore::MioEngine::pickPhysicalDevice(){
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    m_physicalDevice = VK_NULL_HANDLE;
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(m_instances, &deviceCount, nullptr);
     if (deviceCount == 0)
@@ -443,7 +441,7 @@ void EngineCore::MioEngine::pickPhysicalDevice(){
         throw std::runtime_error("failed to find GPUs with Vulkan support!");
     }
     // 遍历所有可用的GPU后，写入m_physicalDevices
-    m_physicalDevices.reserve(deviceCount);
+    m_physicalDevices.resize(deviceCount);
     vkEnumeratePhysicalDevices(m_instances, &deviceCount, m_physicalDevices.data());
 
     std::multimap<int, VkPhysicalDevice> candidates;
@@ -452,14 +450,13 @@ void EngineCore::MioEngine::pickPhysicalDevice(){
         if (isDeviceSuitable(device)){
             int score = rateDeviceSuitability(device);
             candidates.insert(std::make_pair(score, device));
-            physicalDevice = device;
             break;
         }
     }
 
     //检查是否有合适的GPU  
     if (candidates.rbegin()->first > 0) {
-        physicalDevice = candidates.rbegin()->second;
+        m_physicalDevice = candidates.rbegin()->second;
     } else {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
@@ -503,6 +500,7 @@ void EngineCore::MioEngine::createLogicalDevice(){
     createInfo.pEnabledFeatures = &deviceFeatures;
 
     createInfo.enabledExtensionCount = 0;
+    //createInfo.ppEnabledExtensionNames = deviceExtensions.data();
     if (enableValidationLayers) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
@@ -510,14 +508,15 @@ void EngineCore::MioEngine::createLogicalDevice(){
         createInfo.enabledLayerCount = 0;
     }
 
+
     //创建逻辑设备
-    if (vkCreateDevice(m_physicalDevices.front(), &createInfo, nullptr, &m_logicalDevice.front()) != VK_SUCCESS) {
+    if (vkCreateDevice(m_physicalDevices.front(), &createInfo, nullptr, &m_logicalDevice) != VK_SUCCESS) {
         throw std::runtime_error("failed to create logical device!");
     }
     
     //创建设备队列
-    vkGetDeviceQueue(m_logicalDevice.front(), indices.graphicsFamily.value(), 0, &m_graphicsQueue.front());
-    vkGetDeviceQueue(m_logicalDevice.front(), indices.presentFamily.value(), 0, &presentQueue);
+    vkGetDeviceQueue(m_logicalDevice, indices.graphicsFamily.value(), 0, &m_graphicsQueue);
+    vkGetDeviceQueue(m_logicalDevice, indices.presentFamily.value(), 0, &presentQueue);
 }
 
 /**
@@ -572,11 +571,7 @@ void EngineCore::MioEngine::mainLoop(){
  */
 void EngineCore::MioEngine::cleanup(){
     //清理逻辑设备
-    if (!m_logicalDevice.empty()){
-        for (const auto& device : m_logicalDevice){
-            vkDestroyDevice(device, nullptr);
-        }
-    }
+    vkDestroyDevice(m_logicalDevice, nullptr);
 
     //清理Vulkan实例
     if (enableValidationLayers)

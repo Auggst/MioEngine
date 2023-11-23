@@ -10,7 +10,7 @@
  * @throws 如果程序出错抛出std::exception
  */
 int main() {
-	EngineCore::MioEngine engine;
+	EngineCore::MioEngine engine = EngineCore::MioEngine();
 
 	try
 	{

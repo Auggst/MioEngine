@@ -57,10 +57,13 @@ private:
     VkSurfaceKHR m_surface;
     VkQueue presentQueue;
     VkInstance m_instances;
+    VkQueue m_graphicsQueue;
+    VkDevice m_logicalDevice;
+    VkPhysicalDevice m_physicalDevice;
     std::vector<VkExtensionProperties> m_extensions;
     std::vector<VkPhysicalDevice> m_physicalDevices; 
-    std::vector<VkDevice> m_logicalDevice;
-    std::vector<VkQueue> m_graphicsQueue;
+
+
 
 };
 
