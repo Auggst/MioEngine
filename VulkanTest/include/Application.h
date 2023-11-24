@@ -24,6 +24,12 @@ struct QueueFamilyIndices {
     }
 };
 
+struct SwapChainSupportDetails {
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
+};
+
 class MioEngine{
 //函数
 public:
@@ -40,6 +46,9 @@ private:
     bool checkDeviceExtensionSupport(VkPhysicalDevice device);
     bool isDeviceSuitable(VkPhysicalDevice device);
     QueueFamilyIndices findQueueFamily(VkPhysicalDevice device);
+    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
     int rateDeviceSuitability(VkPhysicalDevice device);
     void getSupportedExtensions();
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);

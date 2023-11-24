@@ -273,6 +273,15 @@ bool EngineCore::MioEngine::checkValidationLayerSupport(){
     return true;
 }
 
+/**
+ * 检查给定的 Vulkan 物理设备是否支持所有必需的扩展。
+ *
+ * @param device 要检查的 Vulkan 物理设备。
+ *
+ * @return 如果设备支持所有必需的扩展，则返回 true，否则返回 false。
+ *
+ * @throws 无。
+ */
 bool EngineCore::MioEngine::checkDeviceExtensionSupport(VkPhysicalDevice device){
     uint32_t extensionCount;
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
@@ -303,8 +312,14 @@ bool EngineCore::MioEngine::isDeviceSuitable(VkPhysicalDevice device){
 
     bool extensionsSupported = checkDeviceExtensionSupport(device);
 
+    bool swapChainAdequate = false;
+    if (extensionsSupported) {
+        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+        swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+    }
+
     //独立显卡且支持几何着色器
-    return indices.isComplete() && extensionsSupported;
+    return indices.isComplete() && extensionsSupported && swapChainAdequate;
 }
 
 /**
@@ -344,6 +359,51 @@ EngineCore::QueueFamilyIndices EngineCore::MioEngine::findQueueFamily(VkPhysical
     }
 
     return indices;
+}
+
+
+EngineCore::SwapChainSupportDetails EngineCore::MioEngine::querySwapChainSupport(VkPhysicalDevice device){
+    SwapChainSupportDetails details;
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &details.capabilities);
+
+    //获取所支持的所有格式
+    uint32_t formatCount;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, nullptr);
+
+    if (formatCount != 0) {
+        details.formats.resize(formatCount);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, details.formats.data());
+    }
+
+    //获取所支持的表示模式
+    uint32_t presentModeCount;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, nullptr);
+
+    if (presentModeCount != 0) {
+        details.presentModes.resize(presentModeCount);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, details.presentModes.data());
+    }
+
+    return details;    
+}
+
+VkSurfaceFormatKHR EngineCore::MioEngine::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats){
+    //format控制颜色通道深度以及透明度等，colorSpace控制颜色空间
+    for (const auto& availableFormate : availableFormats) {
+        if (availableFormate.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormate.colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR) {
+            return availableFormate;
+        }
+    }
+    return availableFormats.front();
+}
+
+VkPresentModeKHR EngineCore::MioEngine::chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes){
+    for (const auto& availablePresentMode : availablePresentModes) {
+        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+            return availablePresentMode;
+        }
+    }
 }
 
 /**
@@ -499,8 +559,8 @@ void EngineCore::MioEngine::createLogicalDevice(){
 
     createInfo.pEnabledFeatures = &deviceFeatures;
 
-    createInfo.enabledExtensionCount = 0;
-    //createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+    createInfo.ppEnabledExtensionNames = deviceExtensions.data();
     if (enableValidationLayers) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
