@@ -72,9 +72,11 @@ private:
     VkDevice m_logicalDevice;
     VkPhysicalDevice m_physicalDevice;
     VkSwapchainKHR m_swapChain;
+    VkFormat m_swapChainImageFormat;
+    VkExtent2D m_swapChainExtent;
     std::vector<VkExtensionProperties> m_extensions;
     std::vector<VkPhysicalDevice> m_physicalDevices; 
-
+    std::vector<VkImage> m_swapChainImages;
 
 
 };
