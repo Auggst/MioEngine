@@ -125,7 +125,11 @@ VkResult EngineCore::MioEngine::initVulkan(){
     //创建逻辑设备
     createLogicalDevice();
 
+    //创建交换链
     createSwapChain();
+
+    //创建图片视图
+    createImageViews();
 
     return result;
 }
@@ -366,7 +370,15 @@ EngineCore::QueueFamilyIndices EngineCore::MioEngine::findQueueFamily(VkPhysical
     return indices;
 }
 
-
+/**
+ * 查询给定 Vulkan 物理设备的交换链支持详情。
+ *
+ * @param device 要查询交换链支持的 Vulkan 物理设备
+ *
+ * @return 给定物理设备的交换链支持详情
+ *
+ * @throws None
+ */
 EngineCore::SwapChainSupportDetails EngineCore::MioEngine::querySwapChainSupport(VkPhysicalDevice device){
     SwapChainSupportDetails details;
 
@@ -418,6 +430,15 @@ VkPresentModeKHR EngineCore::MioEngine::chooseSwapPresentMode(const std::vector<
     }
 }
 
+/**
+ * 选择Vulkan表面的交换范围。
+ *
+ * @param capabilities Vulkan表面的能力
+ *
+ * @return 选择的交换范围
+ *
+ * @throws ErrorType 如果在选择过程中发生错误
+ */
 VkExtent2D EngineCore::MioEngine::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities){
     //分辨率
     if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
@@ -511,6 +532,11 @@ void EngineCore::MioEngine::DestroyDebugUtilsMessengerEXT(VkInstance instance, V
     }
 }
 
+/**
+ * 在 EngineCore 类中为 MioEngine 创建一个表面。
+ *
+ * @throws std::runtime_error 如果无法创建窗口表面
+ */
 void EngineCore::MioEngine::createSurface() {
     if (glfwCreateWindowSurface(m_instances, m_window, nullptr, &m_surface) != VK_SUCCESS)
     {
@@ -612,6 +638,11 @@ void EngineCore::MioEngine::createLogicalDevice(){
     vkGetDeviceQueue(m_logicalDevice, indices.presentFamily.value(), 0, &presentQueue);
 }
 
+/**
+ * 在EngineCore类中为MioEngine创建一个交换链。
+ *
+ * @throws std::runtime_error 如果交换链创建失败
+ */
 void EngineCore::MioEngine::createSwapChain() {
     SwapChainSupportDetails details = querySwapChainSupport(m_physicalDevice);
 
@@ -662,6 +693,31 @@ void EngineCore::MioEngine::createSwapChain() {
     vkGetSwapchainImagesKHR(m_logicalDevice, m_swapChain, &imageCount, m_swapChainImages.data());
     m_swapChainImageFormat = surfaceFormat.format;
     m_swapChainExtent = extent;
+}
+
+void EngineCore::MioEngine::createImageViews() {
+    m_swapChainImageViews.resize(m_swapChainImages.size());
+
+    for (size_t i = 0; i < m_swapChainImages.size(); i++) {
+        VkImageViewCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        createInfo.image = m_swapChainImages[i];
+        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        createInfo.format = m_swapChainImageFormat;
+        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        createInfo.subresourceRange.baseMipLevel = 0;
+        createInfo.subresourceRange.levelCount = 1;
+        createInfo.subresourceRange.baseArrayLayer = 0;
+        createInfo.subresourceRange.layerCount = 1;
+
+        if (vkCreateImageView(m_logicalDevice, &createInfo, nullptr, &m_swapChainImageViews[i]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create image views!");
+        }
+    }
 }
 
 /**
@@ -715,6 +771,11 @@ void EngineCore::MioEngine::mainLoop(){
  * @return void
  */
 void EngineCore::MioEngine::cleanup(){
+    //清理图片视图
+    for (auto imageView : m_swapChainImageViews){
+        vkDestroyImageView(m_logicalDevice, imageView, nullptr);
+    }
+
     //清理交换链
     vkDestroySwapchainKHR(m_logicalDevice, m_swapChain, nullptr);
 

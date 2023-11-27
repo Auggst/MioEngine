@@ -59,6 +59,7 @@ private:
     void pickPhysicalDevice();
     void createLogicalDevice();
     void createSwapChain();
+    void createImageViews();
     void mainLoop();
     void cleanup();
 //字段
@@ -77,8 +78,7 @@ private:
     std::vector<VkExtensionProperties> m_extensions;
     std::vector<VkPhysicalDevice> m_physicalDevices; 
     std::vector<VkImage> m_swapChainImages;
-
-
+    std::vector<VkImageView> m_swapChainImageViews;
 };
 
 }
