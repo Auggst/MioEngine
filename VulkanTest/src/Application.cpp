@@ -18,6 +18,8 @@
 #include <limits>
 #include <algorithm>
 
+#include <utils.h>
+
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 const std::vector<const char*> validationLayers = {
@@ -428,6 +430,7 @@ VkPresentModeKHR EngineCore::MioEngine::chooseSwapPresentMode(const std::vector<
             return availablePresentMode;
         }
     }
+    return VK_PRESENT_MODE_FIFO_KHR;
 }
 
 /**
@@ -458,6 +461,19 @@ VkExtent2D EngineCore::MioEngine::chooseSwapExtent(const VkSurfaceCapabilitiesKH
 
         return actualExtent;
     }
+}
+
+
+VkShaderModule EngineCore::MioEngine::createShaderModule(const std::vector<char>& code){
+    VkShaderModuleCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = code.size();
+    createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+    VkShaderModule shaderModule;
+    if (vkCreateShaderModule(m_logicalDevice, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create shader module!");
+    }
+    return shaderModule;
 }
 
 /**
@@ -695,6 +711,11 @@ void EngineCore::MioEngine::createSwapChain() {
     m_swapChainExtent = extent;
 }
 
+/**
+ * 创建交换链图像视图。
+ *
+ * @throws std::runtime_error 如果创建图像视图失败。
+ */
 void EngineCore::MioEngine::createImageViews() {
     m_swapChainImageViews.resize(m_swapChainImages.size());
 
@@ -718,6 +739,80 @@ void EngineCore::MioEngine::createImageViews() {
             throw std::runtime_error("failed to create image views!");
         }
     }
+}
+
+void EngineCore::MioEngine::createGraphicsPipeline() {
+    //可编程管线部分
+    auto vertShaderCode = EngineUtils::readFile("shaders/triangles/vert.spv");
+    auto fragShaderCode = EngineUtils::readFile("shaders/triangles/frag.spv");
+
+    VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+    VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertShaderModule;
+    vertShaderStageInfo.pName = "main";
+    vertShaderStageInfo.pSpecializationInfo = nullptr; //设置常量信息，来消除if
+
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragShaderModule;
+    fragShaderStageInfo.pName = "main";
+    fragShaderStageInfo.pSpecializationInfo = nullptr; //设置常量信息，来消除if
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+    //顶点输入
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.vertexBindingDescriptionCount = 0;
+    vertexInputInfo.pVertexBindingDescriptions = nullptr;
+    vertexInputInfo.vertexAttributeDescriptionCount = 0;
+    vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+    //输入Assembly
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    //固定功能部分
+    std::vector<VkDynamicState> dynamicStates= {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    //视口
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float)m_swapChainExtent.width;
+    viewport.height = (float)m_swapChainExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    //裁剪
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = m_swapChainExtent;
+
+    //设置动态状态
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicState.pDynamicStates = dynamicStates.data(); 
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports = &viewport;
+    viewportState.scissorCount = 1;
+    viewportState.pScissors = &scissor;
+
+    vkDestroyShaderModule(m_logicalDevice, fragShaderModule, nullptr);
+    vkDestroyShaderModule(m_logicalDevice, vertShaderModule, nullptr);
 }
 
 /**
