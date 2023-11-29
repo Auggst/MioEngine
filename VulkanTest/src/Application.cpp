@@ -133,6 +133,12 @@ VkResult EngineCore::MioEngine::initVulkan(){
     //创建图片视图
     createImageViews();
 
+    //创建渲染通道
+    createRenderPass();
+
+    //创建渲染管线
+    createGraphicsPipeline();
+
     return result;
 }
 
@@ -741,6 +747,40 @@ void EngineCore::MioEngine::createImageViews() {
     }
 }
 
+void EngineCore::MioEngine::createRenderPass() {
+    VkAttachmentDescription colorAttachment{};
+    colorAttachment.format = m_swapChainImageFormat;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    //子通道
+    VkAttachmentReference colorAttachmentRef{};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
+
+    //渲染通道
+    VkRenderPassCreateInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+
+    if (vkCreateRenderPass(m_logicalDevice, &renderPassInfo, nullptr, &m_renderPass)) {
+        throw std::runtime_error("failed to create render pass!");
+    }
+}
+
 void EngineCore::MioEngine::createGraphicsPipeline() {
     //可编程管线部分
     auto vertShaderCode = EngineUtils::readFile("shaders/triangles/vert.spv");
@@ -943,6 +983,9 @@ void EngineCore::MioEngine::mainLoop(){
 void EngineCore::MioEngine::cleanup(){
     //清理管线布局
     vkDestroyPipelineLayout(m_logicalDevice, m_pipelineLayout, nullptr);
+
+    //清理渲染通道
+    vkDestroyRenderPass(m_logicalDevice, m_renderPass, nullptr);
 
     //清理图片视图
     for (auto imageView : m_swapChainImageViews){

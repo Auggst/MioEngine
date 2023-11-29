@@ -61,6 +61,7 @@ private:
     void createLogicalDevice();
     void createSwapChain();
     void createImageViews();
+    void createRenderPass();
     void createGraphicsPipeline();
     void mainLoop();
     void cleanup();
@@ -78,6 +79,7 @@ private:
     VkFormat m_swapChainImageFormat;
     VkExtent2D m_swapChainExtent;
     VkPipelineLayout m_pipelineLayout;
+    VkRenderPass m_renderPass;
     std::vector<VkExtensionProperties> m_extensions;
     std::vector<VkPhysicalDevice> m_physicalDevices; 
     std::vector<VkImage> m_swapChainImages;
