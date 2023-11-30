@@ -80,6 +80,7 @@ private:
     VkExtent2D m_swapChainExtent;
     VkPipelineLayout m_pipelineLayout;
     VkRenderPass m_renderPass;
+    VkPipeline m_graphicsPipeline;
     std::vector<VkExtensionProperties> m_extensions;
     std::vector<VkPhysicalDevice> m_physicalDevices; 
     std::vector<VkImage> m_swapChainImages;
