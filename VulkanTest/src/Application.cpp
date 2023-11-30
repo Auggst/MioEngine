@@ -114,30 +114,30 @@ VkResult EngineCore::MioEngine::initVulkan(){
 
     //初始化Vulkan实例
     createInstance();
-
     //设置调试信使
     setupDebugMessenger();
-
     //创建显示窗口
     createSurface();
-
     //选取物理设备
     pickPhysicalDevice();
-
     //创建逻辑设备
     createLogicalDevice();
-
     //创建交换链
     createSwapChain();
-
     //创建图片视图
     createImageViews();
-
     //创建渲染通道
     createRenderPass();
-
     //创建渲染管线
     createGraphicsPipeline();
+    //创建帧缓冲
+    createFramebuffers();
+    //创建命令池
+    createCommandPool();
+    //创建命令缓冲
+    createCommandBuffer();
+    //创建同步对象
+    createSyncObjects();
 
     return result;
 }
@@ -413,6 +413,15 @@ EngineCore::SwapChainSupportDetails EngineCore::MioEngine::querySwapChainSupport
     return details;    
 }
 
+/**
+ * 选择Vulkan表面的交换表面格式。
+ *
+ * @param availableFormats 可用表面格式的向量
+ *
+ * @return 所选择的交换表面格式
+ *
+ * @throws 无
+ */
 VkSurfaceFormatKHR EngineCore::MioEngine::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats){
     //format控制颜色通道深度以及透明度等，colorSpace控制颜色空间
     for (const auto& availableFormate : availableFormats) {
@@ -423,6 +432,15 @@ VkSurfaceFormatKHR EngineCore::MioEngine::chooseSwapSurfaceFormat(const std::vec
     return availableFormats.front();
 }
 
+/**
+ * 选择交换链的显示模式。
+ *
+ * @param availablePresentModes 可用的显示模式向量。
+ *
+ * @return 所选择的显示模式。
+ *
+ * @throws None
+ */
 VkPresentModeKHR EngineCore::MioEngine::chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes){
     /*
     * 控制显示模式，这里采用三缓冲机制，
@@ -469,7 +487,15 @@ VkExtent2D EngineCore::MioEngine::chooseSwapExtent(const VkSurfaceCapabilitiesKH
     }
 }
 
-
+/**
+ * 从给定的代码创建一个着色器模块。
+ *
+ * @param code 用于创建着色器模块的代码
+ *
+ * @return 创建的着色器模块
+ *
+ * @throws std::runtime_error 如果创建着色器模块失败
+ */
 VkShaderModule EngineCore::MioEngine::createShaderModule(const std::vector<char>& code){
     VkShaderModuleCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -747,6 +773,13 @@ void EngineCore::MioEngine::createImageViews() {
     }
 }
 
+/**
+ * 在EngineCore类的MioEngine中创建一个渲染通道。
+ *
+ * @return void
+ *
+ * @throws std::runtime_error 如果无法创建渲染通道
+ */
 void EngineCore::MioEngine::createRenderPass() {
     VkAttachmentDescription colorAttachment{};
     colorAttachment.format = m_swapChainImageFormat;
@@ -769,22 +802,38 @@ void EngineCore::MioEngine::createRenderPass() {
     subpass.pColorAttachments = &colorAttachmentRef;
 
     //渲染通道
+    VkSubpassDependency dependency = {
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    };
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     renderPassInfo.attachmentCount = 1;
     renderPassInfo.pAttachments = &colorAttachment;
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
+    renderPassInfo.dependencyCount = 1;
+    renderPassInfo.pDependencies = &dependency;
 
     if (vkCreateRenderPass(m_logicalDevice, &renderPassInfo, nullptr, &m_renderPass)) {
         throw std::runtime_error("failed to create render pass!");
     }
 }
 
+/**
+ * 为EngineCore::MioEngine类创建图形管线。
+ *
+ * @throws std::runtime_error 如果创建管线布局或图形管线时发生错误。
+ */
 void EngineCore::MioEngine::createGraphicsPipeline() {
     //可编程管线部分
-    auto vertShaderCode = EngineUtils::readFile("shaders/triangles/vert.spv");
-    auto fragShaderCode = EngineUtils::readFile("shaders/triangles/frag.spv");
+    std::string path = "F:/Code/VulkanTest/";
+    auto vertShaderCode = EngineUtils::readFile((path + "shader/triangles/vert.spv").c_str());
+    auto fragShaderCode = EngineUtils::readFile((path + "shader/triangles/frag.spv").c_str());
 
     VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -917,10 +966,8 @@ void EngineCore::MioEngine::createGraphicsPipeline() {
     //管线布局
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = nullptr;
+    pipelineLayoutInfo.setLayoutCount = 0;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
-    pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
     if (vkCreatePipelineLayout(m_logicalDevice, &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create pipeline layout!");
@@ -953,6 +1000,149 @@ void EngineCore::MioEngine::createGraphicsPipeline() {
 }
 
 /**
+ * 在 EngineCore 类中创建 MioEngine 的帧缓冲区。
+ *
+ * @throws std::runtime_error 如果创建帧缓冲区失败
+ */
+void EngineCore::MioEngine::createFramebuffers() {
+    m_swapChainFramebuffers.resize(m_swapChainImageViews.size());
+
+    for (size_t i = 0; i < m_swapChainImageViews.size(); i++) {
+        VkImageView attachments[] = {
+            m_swapChainImageViews[i]
+        };
+
+        VkFramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = m_renderPass;
+        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.width = m_swapChainExtent.width;
+        framebufferInfo.height = m_swapChainExtent.height;
+        framebufferInfo.layers = 1;
+
+        if (vkCreateFramebuffer(m_logicalDevice, &framebufferInfo, nullptr, &m_swapChainFramebuffers[i]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create framebuffer!");
+        }
+    }
+}
+
+/**
+ * 为 EngineCore 的 MioEngine 创建一个命令池。
+ *
+ * @throws std::runtime_error 如果命令池创建失败。
+ */
+void EngineCore::MioEngine::createCommandPool() {
+    QueueFamilyIndices queueFamilyIndices = findQueueFamily(m_physicalDevice);
+
+    VkCommandPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+
+    if (vkCreateCommandPool(m_logicalDevice, &poolInfo, nullptr, &m_commandPool) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create command pool!");
+    }
+}
+
+void EngineCore::MioEngine::createCommandBuffer() {
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = m_commandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    if (vkAllocateCommandBuffers(m_logicalDevice, &allocInfo, &m_commandBuffer) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to allocate command buffers!");
+    }
+}
+
+/**
+ * 创建帧的同步对象。
+ *
+ * @param None
+ *
+ * @return None
+ *
+ * @throws std::runtime_error 如果创建帧的同步对象失败
+ */
+void EngineCore::MioEngine::createSyncObjects() {
+    VkSemaphoreCreateInfo semaphoreInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0
+    };
+    VkFenceCreateInfo fenceInfo = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT //避免第一次等待时无限等待
+    };
+    
+    if (vkCreateSemaphore(m_logicalDevice, &semaphoreInfo, nullptr, &m_imageAvailableSemaphore) != VK_SUCCESS || 
+        vkCreateSemaphore(m_logicalDevice, &semaphoreInfo, nullptr, &m_renderFinishedSemaphore) != VK_SUCCESS ||
+        vkCreateFence(m_logicalDevice, &fenceInfo, nullptr, &m_inFlightFence) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create synchronization objects for a frame!");
+    }
+}
+
+/**
+ * 记录一个用于渲染的命令缓冲区。
+ *
+ * @param commandBuffer 要记录的 Vulkan 命令缓冲区。
+ * @param imageIndex 交换链中图像的索引。
+ *
+ * @throws std::runtime_error 如果命令缓冲区记录失败。
+ */
+void EngineCore::MioEngine::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = 0;
+    beginInfo.pInheritanceInfo = nullptr;
+
+    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+        throw std::runtime_error("failed to begin recording command buffer!");
+    }
+
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = m_renderPass;
+    renderPassInfo.framebuffer = m_swapChainFramebuffers[imageIndex];
+    renderPassInfo.renderArea.offset = {0, 0};
+    renderPassInfo.renderArea.extent = m_swapChainExtent;
+
+    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+    renderPassInfo.clearValueCount = 1;
+    renderPassInfo.pClearValues = &clearColor;
+
+    //开始写入命令
+    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
+    
+    VkViewport viewport = {
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = static_cast<float>(m_swapChainExtent.width),
+        .height = static_cast<float>(m_swapChainExtent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+    VkRect2D scissor = {
+        .offset = {0, 0},
+        .extent = m_swapChainExtent,
+    };
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer);
+
+    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+        throw std::runtime_error("failed to record command buffer!");
+    }
+}
+
+/**
  * 评估给定的 Vulkan 物理设备的适用性。
  *
  * @param device 要评估的 Vulkan 物理设备。
@@ -977,7 +1167,6 @@ int EngineCore::MioEngine::rateDeviceSuitability(VkPhysicalDevice device){
     return score;
 }
 
-
 /**
  * 主循环函数。
  *
@@ -990,7 +1179,55 @@ int EngineCore::MioEngine::rateDeviceSuitability(VkPhysicalDevice device){
 void EngineCore::MioEngine::mainLoop(){
     while(!glfwWindowShouldClose(m_window)){
         glfwPollEvents();
+        drawFrame();
     }
+    vkDeviceWaitIdle(m_logicalDevice);
+}
+
+void EngineCore::MioEngine::drawFrame(){
+    vkWaitForFences(m_logicalDevice, 1, &m_inFlightFence, VK_TRUE, std::numeric_limits<uint64_t>::max());
+
+    vkResetFences(m_logicalDevice, 1, &m_inFlightFence);
+
+    uint32_t imageIndex;
+    vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, std::numeric_limits<uint64_t>::max(), m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+    vkResetCommandBuffer(m_commandBuffer, 0);
+    recordCommandBuffer(m_commandBuffer, imageIndex);
+
+
+    VkSemaphore waitSemaphores[] = {
+        m_imageAvailableSemaphore
+    };
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphore};
+    VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = waitSemaphores,
+        .pWaitDstStageMask = waitStages,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &m_commandBuffer,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = signalSemaphores
+    };
+
+    if (vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFence) != VK_SUCCESS) {
+        throw std::runtime_error("failed to submit draw command buffer!");
+    }
+
+    VkSwapchainKHR swapChains[] = {m_swapChain};
+    VkPresentInfoKHR presentInfo = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = signalSemaphores,
+        .swapchainCount = 1,
+        .pSwapchains = swapChains,
+        .pImageIndices = &imageIndex,
+        .pResults = nullptr,
+    };
+
+    vkQueuePresentKHR(presentQueue, &presentInfo);
 }
 
 /**
@@ -1003,6 +1240,19 @@ void EngineCore::MioEngine::mainLoop(){
  * @return void
  */
 void EngineCore::MioEngine::cleanup(){
+    //清理同步原语
+    vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphore, nullptr);
+    vkDestroySemaphore(m_logicalDevice, m_renderFinishedSemaphore, nullptr);
+    vkDestroyFence(m_logicalDevice, m_inFlightFence, nullptr);
+
+    //清理命令缓冲池
+    vkDestroyCommandPool(m_logicalDevice, m_commandPool, nullptr);
+
+    //清理帧缓冲
+    for (auto framebuffer : m_swapChainFramebuffers){
+        vkDestroyFramebuffer(m_logicalDevice, framebuffer, nullptr);
+    }
+
     //清理渲染管线
     vkDestroyPipeline(m_logicalDevice, m_graphicsPipeline, nullptr);
 

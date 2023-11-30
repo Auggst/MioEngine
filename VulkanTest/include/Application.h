@@ -63,7 +63,13 @@ private:
     void createImageViews();
     void createRenderPass();
     void createGraphicsPipeline();
+    void createFramebuffers();
+    void createCommandPool();
+    void createCommandBuffer();
+    void createSyncObjects();
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void mainLoop();
+    void drawFrame();
     void cleanup();
 //字段
 private:
@@ -81,10 +87,16 @@ private:
     VkPipelineLayout m_pipelineLayout;
     VkRenderPass m_renderPass;
     VkPipeline m_graphicsPipeline;
+    VkCommandPool m_commandPool;
+    VkCommandBuffer m_commandBuffer;
+    VkSemaphore m_imageAvailableSemaphore;
+    VkSemaphore m_renderFinishedSemaphore;
+    VkFence m_inFlightFence;
     std::vector<VkExtensionProperties> m_extensions;
     std::vector<VkPhysicalDevice> m_physicalDevices; 
     std::vector<VkImage> m_swapChainImages;
     std::vector<VkImageView> m_swapChainImageViews;
+    std::vector<VkFramebuffer> m_swapChainFramebuffers;
 };
 
 }
