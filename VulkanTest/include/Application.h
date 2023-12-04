@@ -65,7 +65,7 @@ private:
     void createGraphicsPipeline();
     void createFramebuffers();
     void createCommandPool();
-    void createCommandBuffer();
+    void createCommandBuffers();
     void createSyncObjects();
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void mainLoop();
@@ -73,6 +73,7 @@ private:
     void cleanup();
 //字段
 private:
+    uint32_t m_currentFrame = 0;
     GLFWwindow* m_window;
     VkDebugUtilsMessengerEXT m_debugMessenger;
     VkSurfaceKHR m_surface;
@@ -88,10 +89,10 @@ private:
     VkRenderPass m_renderPass;
     VkPipeline m_graphicsPipeline;
     VkCommandPool m_commandPool;
-    VkCommandBuffer m_commandBuffer;
-    VkSemaphore m_imageAvailableSemaphore;
-    VkSemaphore m_renderFinishedSemaphore;
-    VkFence m_inFlightFence;
+    std::vector<VkCommandBuffer> m_commandBuffers;
+    std::vector<VkSemaphore> m_imageAvailableSemaphores;
+    std::vector<VkSemaphore> m_renderFinishedSemaphores;
+    std::vector<VkFence> m_inFlightFences;
     std::vector<VkExtensionProperties> m_extensions;
     std::vector<VkPhysicalDevice> m_physicalDevices; 
     std::vector<VkImage> m_swapChainImages;

@@ -20,14 +20,15 @@
 
 #include <utils.h>
 
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t WIDTH = 800;  // 窗口大小800x600
+const uint32_t HEIGHT = 600; // 窗口大小800x600
+const int MAX_FRAMES_IN_FLIGHT = 2; // 2帧
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
-};
+}; // 验证层
 const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME
-};
+}; // 扩展
 #ifdef NDEBUG
     const bool enableValidationLayers = false;
 #else
@@ -135,7 +136,7 @@ VkResult EngineCore::MioEngine::initVulkan(){
     //创建命令池
     createCommandPool();
     //创建命令缓冲
-    createCommandBuffer();
+    createCommandBuffers();
     //创建同步对象
     createSyncObjects();
 
@@ -1045,14 +1046,15 @@ void EngineCore::MioEngine::createCommandPool() {
     }
 }
 
-void EngineCore::MioEngine::createCommandBuffer() {
+void EngineCore::MioEngine::createCommandBuffers() {
+    m_commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = m_commandPool;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = 1;
+    allocInfo.commandBufferCount = (uint32_t)m_commandBuffers.size();
 
-    if (vkAllocateCommandBuffers(m_logicalDevice, &allocInfo, &m_commandBuffer) != VK_SUCCESS)
+    if (vkAllocateCommandBuffers(m_logicalDevice, &allocInfo, m_commandBuffers.data()) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to allocate command buffers!");
     }
@@ -1068,6 +1070,9 @@ void EngineCore::MioEngine::createCommandBuffer() {
  * @throws std::runtime_error 如果创建帧的同步对象失败
  */
 void EngineCore::MioEngine::createSyncObjects() {
+    m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    m_renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    m_inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
     VkSemaphoreCreateInfo semaphoreInfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         .pNext = nullptr,
@@ -1078,11 +1083,13 @@ void EngineCore::MioEngine::createSyncObjects() {
         .pNext = nullptr,
         .flags = VK_FENCE_CREATE_SIGNALED_BIT //避免第一次等待时无限等待
     };
-    
-    if (vkCreateSemaphore(m_logicalDevice, &semaphoreInfo, nullptr, &m_imageAvailableSemaphore) != VK_SUCCESS || 
-        vkCreateSemaphore(m_logicalDevice, &semaphoreInfo, nullptr, &m_renderFinishedSemaphore) != VK_SUCCESS ||
-        vkCreateFence(m_logicalDevice, &fenceInfo, nullptr, &m_inFlightFence) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create synchronization objects for a frame!");
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        if (vkCreateSemaphore(m_logicalDevice, &semaphoreInfo, nullptr, &m_imageAvailableSemaphores[i]) != VK_SUCCESS || 
+            vkCreateSemaphore(m_logicalDevice, &semaphoreInfo, nullptr, &m_renderFinishedSemaphores[i]) != VK_SUCCESS ||
+            vkCreateFence(m_logicalDevice, &fenceInfo, nullptr, &m_inFlightFences[i]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create synchronization objects for a frame!");
+        }
     }
 }
 
@@ -1185,34 +1192,34 @@ void EngineCore::MioEngine::mainLoop(){
 }
 
 void EngineCore::MioEngine::drawFrame(){
-    vkWaitForFences(m_logicalDevice, 1, &m_inFlightFence, VK_TRUE, std::numeric_limits<uint64_t>::max());
+    vkWaitForFences(m_logicalDevice, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
 
-    vkResetFences(m_logicalDevice, 1, &m_inFlightFence);
+    vkResetFences(m_logicalDevice, 1, &m_inFlightFences[m_currentFrame]);
 
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, std::numeric_limits<uint64_t>::max(), m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+    vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, std::numeric_limits<uint64_t>::max(), m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-    vkResetCommandBuffer(m_commandBuffer, 0);
-    recordCommandBuffer(m_commandBuffer, imageIndex);
+    vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
+    recordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
 
 
     VkSemaphore waitSemaphores[] = {
-        m_imageAvailableSemaphore
+        m_imageAvailableSemaphores[m_currentFrame]
     };
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphore};
+    VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphores[m_currentFrame]};
     VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = waitSemaphores,
         .pWaitDstStageMask = waitStages,
         .commandBufferCount = 1,
-        .pCommandBuffers = &m_commandBuffer,
+        .pCommandBuffers = &m_commandBuffers[m_currentFrame],
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = signalSemaphores
     };
 
-    if (vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFence) != VK_SUCCESS) {
+    if (vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFences[m_currentFrame]) != VK_SUCCESS) {
         throw std::runtime_error("failed to submit draw command buffer!");
     }
 
@@ -1228,6 +1235,8 @@ void EngineCore::MioEngine::drawFrame(){
     };
 
     vkQueuePresentKHR(presentQueue, &presentInfo);
+
+    m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 /**
@@ -1241,9 +1250,11 @@ void EngineCore::MioEngine::drawFrame(){
  */
 void EngineCore::MioEngine::cleanup(){
     //清理同步原语
-    vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphore, nullptr);
-    vkDestroySemaphore(m_logicalDevice, m_renderFinishedSemaphore, nullptr);
-    vkDestroyFence(m_logicalDevice, m_inFlightFence, nullptr);
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphores[i], nullptr);
+        vkDestroySemaphore(m_logicalDevice, m_renderFinishedSemaphores[i], nullptr);
+        vkDestroyFence(m_logicalDevice, m_inFlightFences[i], nullptr);
+    }
 
     //清理命令缓冲池
     vkDestroyCommandPool(m_logicalDevice, m_commandPool, nullptr);
