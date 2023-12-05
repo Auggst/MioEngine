@@ -58,6 +58,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
+static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+    auto app = reinterpret_cast<EngineCore::MioEngine*>(glfwGetWindowUserPointer(window));
+    app->framebufferResized = true;
+}
+
 EngineCore::MioEngine::MioEngine(){
     m_physicalDevices = std::vector<VkPhysicalDevice>();
     m_physicalDevices.reserve(1);
@@ -98,6 +103,8 @@ VkResult EngineCore::MioEngine::initWindow(){
         glfwTerminate();
         return VK_ERROR_INITIALIZATION_FAILED;
     }
+    glfwSetWindowUserPointer(m_window, this);
+    glfwSetFramebufferSizeCallback(m_window, framebufferResizeCallback);
     return VK_SUCCESS;
 }
 
@@ -1149,6 +1156,36 @@ void EngineCore::MioEngine::recordCommandBuffer(VkCommandBuffer commandBuffer, u
     }
 }
 
+
+void EngineCore::MioEngine::recreateSwapChain() {
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(m_window, &width, &height);
+    while (width == 0 || height == 0) {
+        glfwGetFramebufferSize(m_window, &width, &height);
+        glfwWaitEvents();
+    }
+    //等待执行完，避免遇到正在使用的资源
+    vkDeviceWaitIdle(m_logicalDevice);
+
+    cleanupSwapChain();
+
+    createSwapChain();
+    createImageViews();
+    createFramebuffers();
+}
+
+void EngineCore::MioEngine::cleanupSwapChain() {
+    for (size_t i = 0; i < m_swapChainFramebuffers.size(); i++) {
+        vkDestroyFramebuffer(m_logicalDevice, m_swapChainFramebuffers[i], nullptr);
+    }
+
+    for (size_t i = 0; i < m_swapChainImageViews.size(); i++) {
+        vkDestroyImageView(m_logicalDevice, m_swapChainImageViews[i], nullptr);
+    }
+
+    vkDestroySwapchainKHR(m_logicalDevice, m_swapChain, nullptr);
+}
+
 /**
  * 评估给定的 Vulkan 物理设备的适用性。
  *
@@ -1194,10 +1231,15 @@ void EngineCore::MioEngine::mainLoop(){
 void EngineCore::MioEngine::drawFrame(){
     vkWaitForFences(m_logicalDevice, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
 
-    vkResetFences(m_logicalDevice, 1, &m_inFlightFences[m_currentFrame]);
-
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, std::numeric_limits<uint64_t>::max(), m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult result = vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, std::numeric_limits<uint64_t>::max(), m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) { //表示当前交换链内的图像格式不在适用于下一张图片尺寸，所以需要重建交换链
+        recreateSwapChain();
+        return;
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        throw std::runtime_error("failed to acquire swap chain image!");
+    }
+    vkResetFences(m_logicalDevice, 1, &m_inFlightFences[m_currentFrame]);
 
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
     recordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
@@ -1234,7 +1276,13 @@ void EngineCore::MioEngine::drawFrame(){
         .pResults = nullptr,
     };
 
-    vkQueuePresentKHR(presentQueue, &presentInfo);
+    result = vkQueuePresentKHR(presentQueue, &presentInfo);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
+        framebufferResized = false;
+        recreateSwapChain();
+    } else if (result != VK_SUCCESS) {
+        throw std::runtime_error("failed to present swap chain image!");
+    }
 
     m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
@@ -1249,20 +1297,8 @@ void EngineCore::MioEngine::drawFrame(){
  * @return void
  */
 void EngineCore::MioEngine::cleanup(){
-    //清理同步原语
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphores[i], nullptr);
-        vkDestroySemaphore(m_logicalDevice, m_renderFinishedSemaphores[i], nullptr);
-        vkDestroyFence(m_logicalDevice, m_inFlightFences[i], nullptr);
-    }
-
-    //清理命令缓冲池
-    vkDestroyCommandPool(m_logicalDevice, m_commandPool, nullptr);
-
-    //清理帧缓冲
-    for (auto framebuffer : m_swapChainFramebuffers){
-        vkDestroyFramebuffer(m_logicalDevice, framebuffer, nullptr);
-    }
+    //清理交换链，包括帧缓冲，图像视图和交换链本身
+    cleanupSwapChain();
 
     //清理渲染管线
     vkDestroyPipeline(m_logicalDevice, m_graphicsPipeline, nullptr);
@@ -1273,13 +1309,15 @@ void EngineCore::MioEngine::cleanup(){
     //清理渲染通道
     vkDestroyRenderPass(m_logicalDevice, m_renderPass, nullptr);
 
-    //清理图片视图
-    for (auto imageView : m_swapChainImageViews){
-        vkDestroyImageView(m_logicalDevice, imageView, nullptr);
+    //清理同步原语
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphores[i], nullptr);
+        vkDestroySemaphore(m_logicalDevice, m_renderFinishedSemaphores[i], nullptr);
+        vkDestroyFence(m_logicalDevice, m_inFlightFences[i], nullptr);
     }
 
-    //清理交换链
-    vkDestroySwapchainKHR(m_logicalDevice, m_swapChain, nullptr);
+    //清理命令缓冲池
+    vkDestroyCommandPool(m_logicalDevice, m_commandPool, nullptr);
 
     //清理逻辑设备
     vkDestroyDevice(m_logicalDevice, nullptr);

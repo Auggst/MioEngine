@@ -68,10 +68,14 @@ private:
     void createCommandBuffers();
     void createSyncObjects();
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void recreateSwapChain();
+    void cleanupSwapChain();
     void mainLoop();
     void drawFrame();
     void cleanup();
 //字段
+public:
+    bool framebufferResized = false;
 private:
     uint32_t m_currentFrame = 0;
     GLFWwindow* m_window;
