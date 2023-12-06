@@ -149,6 +149,8 @@ VkResult EngineCore::MioEngine::initVulkan(){
     createFramebuffers();
     //创建命令池
     createCommandPool();
+    //创建顶点缓冲
+    createVertexBuffer();
     //创建命令缓冲
     createCommandBuffers();
     //创建同步对象
@@ -1055,7 +1057,7 @@ void EngineCore::MioEngine::createCommandPool() {
 
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
 
     if (vkCreateCommandPool(m_logicalDevice, &poolInfo, nullptr, &m_commandPool) != VK_SUCCESS) {
@@ -1110,6 +1112,38 @@ void EngineCore::MioEngine::createSyncObjects() {
     }
 }
 
+void EngineCore::MioEngine::createVertexBuffer() {
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(vertices[0]) * vertices.size();
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    bufferInfo.flags = 0; //用于配置稀疏缓冲区内存
+
+    if (vkCreateBuffer(m_logicalDevice, &bufferInfo, nullptr, &m_vertexBuffer) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create vertex buffer!");
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(m_logicalDevice, m_vertexBuffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    if (vkAllocateMemory(m_logicalDevice, &allocInfo, nullptr, &m_vertexBufferMemory) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate vertex buffer memory!");
+    }
+
+    vkBindBufferMemory(m_logicalDevice, m_vertexBuffer, m_vertexBufferMemory, 0); //如果内存没有对齐，则0应该是memRequirements.alignment
+
+    void* data;
+    vkMapMemory(m_logicalDevice, m_vertexBufferMemory, 0, bufferInfo.size, 0, &data);
+    memcpy(data, vertices.data(), (size_t)bufferInfo.size);
+    vkUnmapMemory(m_logicalDevice, m_vertexBufferMemory);
+}
+
 /**
  * 记录一个用于渲染的命令缓冲区。
  *
@@ -1135,13 +1169,17 @@ void EngineCore::MioEngine::recordCommandBuffer(VkCommandBuffer commandBuffer, u
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = m_swapChainExtent;
 
-    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 0.0f}}};
     renderPassInfo.clearValueCount = 1;
     renderPassInfo.pClearValues = &clearColor;
 
     //开始写入命令
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
+
+    VkBuffer vertexBuffers[] = {m_vertexBuffer};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
     
     VkViewport viewport = {
         .x = 0.0f,
@@ -1158,7 +1196,7 @@ void EngineCore::MioEngine::recordCommandBuffer(VkCommandBuffer commandBuffer, u
         .extent = m_swapChainExtent,
     };
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -1219,6 +1257,17 @@ int EngineCore::MioEngine::rateDeviceSuitability(VkPhysicalDevice device){
         score += 1000;
     }
     return score;
+}
+
+uint32_t EngineCore::MioEngine::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memoryProperties;
+    vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &memoryProperties);
+    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+    throw std::runtime_error("failed to find suitable memory type!");
 }
 
 /**
@@ -1309,6 +1358,10 @@ void EngineCore::MioEngine::drawFrame(){
 void EngineCore::MioEngine::cleanup(){
     //清理交换链，包括帧缓冲，图像视图和交换链本身
     cleanupSwapChain();
+
+    //清理顶点缓冲
+    vkDestroyBuffer(m_logicalDevice, m_vertexBuffer, nullptr);
+    vkFreeMemory(m_logicalDevice, m_vertexBufferMemory, nullptr);
 
     //清理渲染管线
     vkDestroyPipeline(m_logicalDevice, m_graphicsPipeline, nullptr);
