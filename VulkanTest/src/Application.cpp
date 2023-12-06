@@ -17,8 +17,9 @@
 #include <cstdalign>
 #include <limits>
 #include <algorithm>
-
 #include <utils.h>
+
+#include <Vetex.h>
 
 const uint32_t WIDTH = 800;  // 窗口大小800x600
 const uint32_t HEIGHT = 600; // 窗口大小800x600
@@ -34,6 +35,12 @@ const std::vector<const char*> deviceExtensions = {
 #else
     const bool enableValidationLayers = true;
 #endif
+
+const std::vector<EngineCore::Vertex> vertices = {
+    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}
+};
 
 /**
  * 一个处理来自Vulkan API的调试消息的回调函数。
@@ -840,8 +847,8 @@ void EngineCore::MioEngine::createRenderPass() {
 void EngineCore::MioEngine::createGraphicsPipeline() {
     //可编程管线部分
     std::string path = "F:/Code/VulkanTest/";
-    auto vertShaderCode = EngineUtils::readFile((path + "shader/triangles/vert.spv").c_str());
-    auto fragShaderCode = EngineUtils::readFile((path + "shader/triangles/frag.spv").c_str());
+    auto vertShaderCode = EngineUtils::readFile((path + "shader/vert.spv").c_str());
+    auto fragShaderCode = EngineUtils::readFile((path + "shader/frag.spv").c_str());
 
     VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -863,12 +870,15 @@ void EngineCore::MioEngine::createGraphicsPipeline() {
     VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
     //顶点输入
+    auto bindingDescription = Vertex::getBindingDescriptions();
+    auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 0;
-    vertexInputInfo.pVertexBindingDescriptions = nullptr;
-    vertexInputInfo.vertexAttributeDescriptionCount = 0;
-    vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
     //输入Assembly
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};

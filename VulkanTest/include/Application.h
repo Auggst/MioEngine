@@ -5,15 +5,18 @@
 #include <memory>
 #include <string>
 #include <optional>
+#include <array>
 
 #include <vulkan/vulkan.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+
 namespace EngineCore{
 struct MioInfo{
     std::string name;
 };
+
 
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily = -1;
