@@ -20,6 +20,7 @@
 #include <utils.h>
 
 #include <Vetex.h>
+#include <UniformBuffer.h>
 
 const uint32_t WIDTH = 800;  // 窗口大小800x600
 const uint32_t HEIGHT = 600; // 窗口大小800x600
@@ -39,7 +40,12 @@ const std::vector<const char*> deviceExtensions = {
 const std::vector<EngineCore::Vertex> vertices = {
     {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
     {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}
+    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+};
+
+const std::vector<uint16_t> indices = {
+    0,1,2, 2,3,0
 };
 
 /**
@@ -143,6 +149,8 @@ VkResult EngineCore::MioEngine::initVulkan(){
     createImageViews();
     //创建渲染通道
     createRenderPass();
+    //创建描述符集布局
+    createDescriptorSetLayout();
     //创建渲染管线
     createGraphicsPipeline();
     //创建帧缓冲
@@ -151,6 +159,8 @@ VkResult EngineCore::MioEngine::initVulkan(){
     createCommandPool();
     //创建顶点缓冲
     createVertexBuffer();
+    //创建索引缓冲
+    createIndexBuffer();
     //创建命令缓冲
     createCommandBuffers();
     //创建同步对象
@@ -841,6 +851,24 @@ void EngineCore::MioEngine::createRenderPass() {
     }
 }
 
+void EngineCore::MioEngine::createDescriptorSetLayout() {
+    VkDescriptorSetLayoutBinding  uboLayoutBinding{};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uboLayoutBinding.pImmutableSamplers = nullptr; //与图像采样相关，暂不考虑
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &uboLayoutBinding;
+
+    if (vkCreateDescriptorSetLayout(m_logicalDevice, &layoutInfo, nullptr, &m_descriptorSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor set layout!");
+    }
+}
+
 /**
  * 为EngineCore::MioEngine类创建图形管线。
  *
@@ -1131,6 +1159,26 @@ void EngineCore::MioEngine::createVertexBuffer() {
     vkFreeMemory(m_logicalDevice, stagingBufferMemory, nullptr);
 }
 
+void EngineCore::MioEngine::createIndexBuffer() {
+    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(stagingBuffer, stagingBufferMemory, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    void* data;
+    vkMapMemory(m_logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, indices.data(), (size_t)bufferSize);
+    vkUnmapMemory(m_logicalDevice, stagingBufferMemory);
+
+    createBuffer(m_indexBuffer, m_indexBufferMemory, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    copyBuffer(stagingBuffer, m_indexBuffer, bufferSize);
+
+    vkDestroyBuffer(m_logicalDevice, stagingBuffer, nullptr);
+    vkFreeMemory(m_logicalDevice, stagingBufferMemory, nullptr);
+}
+
 void EngineCore::MioEngine::createBuffer(VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties) {
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1233,6 +1281,7 @@ void EngineCore::MioEngine::recordCommandBuffer(VkCommandBuffer commandBuffer, u
     VkBuffer vertexBuffers[] = {m_vertexBuffer};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
     
     VkViewport viewport = {
         .x = 0.0f,
@@ -1249,7 +1298,8 @@ void EngineCore::MioEngine::recordCommandBuffer(VkCommandBuffer commandBuffer, u
         .extent = m_swapChainExtent,
     };
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-    vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+    //vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -1415,6 +1465,10 @@ void EngineCore::MioEngine::cleanup(){
     //清理顶点缓冲
     vkDestroyBuffer(m_logicalDevice, m_vertexBuffer, nullptr);
     vkFreeMemory(m_logicalDevice, m_vertexBufferMemory, nullptr);
+
+    //清理索引缓冲
+    vkDestroyBuffer(m_logicalDevice, m_indexBuffer, nullptr);
+    vkFreeMemory(m_logicalDevice, m_indexBufferMemory, nullptr);
 
     //清理渲染管线
     vkDestroyPipeline(m_logicalDevice, m_graphicsPipeline, nullptr);
