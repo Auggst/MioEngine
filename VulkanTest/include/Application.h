@@ -74,12 +74,14 @@ private:
     void createSyncObjects();
     void createVertexBuffer();
     void createIndexBuffer();
+    void createUniformBuffers();
     void createBuffer(VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void recreateSwapChain();
     void cleanupSwapChain();
     void mainLoop();
+    void updateUniformBuffer(uint32_t currentImage);
     void drawFrame();
     void cleanup();
 //字段
@@ -116,6 +118,9 @@ private:
     std::vector<VkImage> m_swapChainImages;
     std::vector<VkImageView> m_swapChainImageViews;
     std::vector<VkFramebuffer> m_swapChainFramebuffers;
+    std::vector<VkBuffer> m_uniformBuffers;
+    std::vector<VkDeviceMemory> m_uniformBuffersMemory;
+    std::vector<void*> m_uninformBuffersMapped;
 };
 
 }

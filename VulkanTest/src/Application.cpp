@@ -8,6 +8,8 @@
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/vec4.hpp>
 #include <glm/mat4x4.hpp>
 
@@ -17,8 +19,9 @@
 #include <cstdalign>
 #include <limits>
 #include <algorithm>
-#include <utils.h>
+#include <chrono>
 
+#include <utils.h>
 #include <Vetex.h>
 #include <UniformBuffer.h>
 
@@ -161,6 +164,8 @@ VkResult EngineCore::MioEngine::initVulkan(){
     createVertexBuffer();
     //创建索引缓冲
     createIndexBuffer();
+    //创建Uniform缓存
+    createUniformBuffers();
     //创建命令缓冲
     createCommandBuffers();
     //创建同步对象
@@ -1014,7 +1019,8 @@ void EngineCore::MioEngine::createGraphicsPipeline() {
     //管线布局
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 0;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &m_descriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
 
     if (vkCreatePipelineLayout(m_logicalDevice, &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS) {
@@ -1177,6 +1183,19 @@ void EngineCore::MioEngine::createIndexBuffer() {
 
     vkDestroyBuffer(m_logicalDevice, stagingBuffer, nullptr);
     vkFreeMemory(m_logicalDevice, stagingBufferMemory, nullptr);
+}
+
+void EngineCore::MioEngine::createUniformBuffers() {
+    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+    m_uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    m_uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    m_uninformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(m_uniformBuffers[i], m_uniformBuffersMemory[i], bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        vkMapMemory(m_logicalDevice, m_uniformBuffersMemory[i], 0, bufferSize, 0, &m_uninformBuffersMapped[i]);
+    }
 }
 
 void EngineCore::MioEngine::createBuffer(VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties) {
@@ -1390,6 +1409,21 @@ void EngineCore::MioEngine::mainLoop(){
     vkDeviceWaitIdle(m_logicalDevice);
 }
 
+void EngineCore::MioEngine::updateUniformBuffer(uint32_t currentImage){
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+    UniformBufferObject ubo{};
+    ubo.model = glm::rotate(glm::mat4(1.0), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.proj = glm::perspective(glm::radians(45.0f), m_swapChainExtent.width / (float)m_swapChainExtent.height, 0.1f, 10.0f);
+    ubo.proj[1][1] *= -1;
+
+    memcpy(m_uninformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+}
+
 void EngineCore::MioEngine::drawFrame(){
     vkWaitForFences(m_logicalDevice, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
 
@@ -1405,6 +1439,8 @@ void EngineCore::MioEngine::drawFrame(){
 
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
     recordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
+
+    updateUniformBuffer(m_currentFrame);
 
 
     VkSemaphore waitSemaphores[] = {
@@ -1461,6 +1497,15 @@ void EngineCore::MioEngine::drawFrame(){
 void EngineCore::MioEngine::cleanup(){
     //清理交换链，包括帧缓冲，图像视图和交换链本身
     cleanupSwapChain();
+
+    //清理uniform缓冲
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroyBuffer(m_logicalDevice, m_uniformBuffers[i], nullptr);
+        vkFreeMemory(m_logicalDevice, m_uniformBuffersMemory[i], nullptr);
+    }
+    
+    //清理描述符集
+    vkDestroyDescriptorSetLayout(m_logicalDevice, m_descriptorSetLayout, nullptr);
 
     //清理顶点缓冲
     vkDestroyBuffer(m_logicalDevice, m_vertexBuffer, nullptr);
