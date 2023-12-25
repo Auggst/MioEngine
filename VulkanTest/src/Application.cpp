@@ -165,6 +165,10 @@ VkResult EngineCore::MioEngine::initVulkan(){
     createCommandPool();
     //创建纹理图片
     createTextureImage();
+    //创建纹理图片视图
+    createTextureImageView();
+    //创建纹理采样
+    createTextureSampler();
     //创建顶点缓冲
     createVertexBuffer();
     //创建索引缓冲
@@ -376,8 +380,11 @@ bool EngineCore::MioEngine::isDeviceSuitable(VkPhysicalDevice device){
         swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
     }
 
+    VkPhysicalDeviceFeatures supportedFeatures;
+    vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
+
     //独立显卡且支持几何着色器
-    return indices.isComplete() && extensionsSupported && swapChainAdequate;
+    return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
 }
 
 /**
@@ -698,6 +705,7 @@ void EngineCore::MioEngine::createLogicalDevice(){
 
     //设备支持的特征，在选物理设备时已经指定
     VkPhysicalDeviceFeatures deviceFeatures{};
+    deviceFeatures.samplerAnisotropy = VK_TRUE;
 
     //设备创建信息
     VkDeviceCreateInfo createInfo{};
@@ -1264,6 +1272,11 @@ void EngineCore::MioEngine::createDescriptorSets() {
     }
 }
 
+/**
+ * 创建纹理图像。
+ *
+ * @throws std::runtime_error 如果纹理图像加载失败
+ */
 void EngineCore::MioEngine::createTextureImage() {
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load("F:\\Code\\VulkanTest\\textures\\statue.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -1292,6 +1305,59 @@ void EngineCore::MioEngine::createTextureImage() {
 
     vkDestroyBuffer(m_logicalDevice, stagingBuffer, nullptr);
     vkFreeMemory(m_logicalDevice, stagingBufferMemory, nullptr);
+}
+
+void EngineCore::MioEngine::createTextureSampler() {
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
+    VkSamplerCreateInfo samplerInfo = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .anisotropyEnable = VK_TRUE,
+        .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
+        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE,
+    };
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 0.0f;
+
+    if (vkCreateSampler(m_logicalDevice, &samplerInfo, nullptr, &m_textureSampler) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create texture sampler!");
+    }
+}
+
+void EngineCore::MioEngine::createTextureImageView() {
+    m_swapChainImageViews.resize(m_swapChainImages.size());
+    for (size_t i = 0; i < m_swapChainImageViews.size(); i++){
+        m_swapChainImageViews[i] = createTextureImageView(m_swapChainImages[i], m_swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+    }
+}
+
+VkImageView EngineCore::MioEngine::createTextureImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = format;
+    viewInfo.subresourceRange.aspectMask = aspectFlags;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+
+    VkImageView imageView;
+    if (vkCreateImageView(m_logicalDevice, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create texture image view!");
+    }
+    return imageView;
 }
 
 void EngineCore::MioEngine::createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
@@ -1710,6 +1776,12 @@ void EngineCore::MioEngine::cleanup(){
     //清理交换链，包括帧缓冲，图像视图和交换链本身
     cleanupSwapChain();
 
+    //清理采样
+    vkDestroySampler(m_logicalDevice, m_textureSampler, nullptr);
+    //清理图像视图
+    vkDestroyImageView(m_logicalDevice, m_textureImageView, nullptr);
+
+    //清理图像
     vkDestroyImage(m_logicalDevice, m_textureImage, nullptr);
     vkFreeMemory(m_logicalDevice, m_textureImageMemory, nullptr);
 
