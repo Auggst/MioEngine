@@ -77,6 +77,9 @@ private:
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+    VkFormat findDepthFormat();
+    void createDepthResources();
     void createTextureImage();
     void createTextureImageView();
     void createTextureSampler();
@@ -121,6 +124,9 @@ private:
     VkBuffer m_indexBuffer;
     VkDeviceMemory m_indexBufferMemory;
     VkDescriptorPool m_descriptorPool;
+    VkImage m_depthImage;
+    VkDeviceMemory m_depthImageMemory;
+    VkImageView m_depthImageView;
     VkImage m_textureImage;
     VkDeviceMemory m_textureImageMemory;
     VkImageView m_textureImageView;
