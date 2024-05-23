@@ -1735,10 +1735,14 @@ void EngineCore::MioEngine::recreateSwapChain() {
 
     createSwapChain();
     createImageViews();
+    createDepthResources();
     createFramebuffers();
 }
 
 void EngineCore::MioEngine::cleanupSwapChain() {
+    vkDestroyImageView(m_logicalDevice, m_depthImageView, nullptr);
+    vkDestroyImage(m_logicalDevice, m_depthImage, nullptr);
+    vkFreeMemory(m_logicalDevice, m_depthImageMemory, nullptr);
     for (size_t i = 0; i < m_swapChainFramebuffers.size(); i++) {
         vkDestroyFramebuffer(m_logicalDevice, m_swapChainFramebuffers[i], nullptr);
     }
