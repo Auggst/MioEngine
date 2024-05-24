@@ -1,5 +1,16 @@
 #include "Application.h"
 
+#include <format>
+#include <map>
+#include <set>
+#include <cstdalign>
+#include <limits>
+#include <algorithm>
+#include <chrono>
+
+#include <utils.h>
+#include <UniformBuffer.h>
+
 #define VK_USE_PLATFORM_WIN32_KHR
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -15,21 +26,15 @@
 #include <glm/mat4x4.hpp>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
-
-#include <format>
-#include <map>
-#include <set>
-#include <cstdalign>
-#include <limits>
-#include <algorithm>
-#include <chrono>
-
-#include <utils.h>
-#include <Vetex.h>
-#include <UniformBuffer.h>
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
 
 const uint32_t WIDTH = 800;  // 窗口大小800x600
 const uint32_t HEIGHT = 600; // 窗口大小800x600
+
+const std::string MODEL_PATH = "F:\\Code\\VulkanTest\\models\\viking_room\\viking_room.obj";
+const std::string TEXTURE_PATH = "F:\\Code\\VulkanTest\\textures\\viking_room.png";
+
 const int MAX_FRAMES_IN_FLIGHT = 2; // 2帧
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
@@ -43,23 +48,23 @@ const std::vector<const char*> deviceExtensions = {
     const bool enableValidationLayers = true;
 #endif
 
-const std::vector<EngineCore::Vertex> vertices = {
-    //矩形1
-    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-    //矩形2
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
-};
+// const std::vector<EngineCore::Vertex> vertices = {
+//     //矩形1
+//     {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//     {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//     {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//     {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+//     //矩形2
+//     {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+//     {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+//     {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+//     {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
+// };
 
-const std::vector<uint16_t> indices = {
-    0,1,2, 2,3,0,
-    4,5,6, 6,7,4
-};
+// const std::vector<uint16_t> indices = {
+//     0,1,2, 2,3,0,
+//     4,5,6, 6,7,4
+// };
 
 /**
  * 一个处理来自Vulkan API的调试消息的回调函数。
@@ -178,6 +183,8 @@ VkResult EngineCore::MioEngine::initVulkan(){
     createTextureImageView();
     //创建纹理采样
     createTextureSampler();
+    //加载模型
+    loadModel();
     //创建顶点缓冲
     createVertexBuffer();
     //创建索引缓冲
@@ -525,7 +532,7 @@ VkPresentModeKHR EngineCore::MioEngine::chooseSwapPresentMode(const std::vector<
  */
 VkExtent2D EngineCore::MioEngine::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities){
     //分辨率
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+    if (capabilities.currentExtent.width != (std::numeric_limits<uint32_t>::max)()) {
         return capabilities.currentExtent;
     } else {
         int width, height;
@@ -1214,8 +1221,37 @@ void EngineCore::MioEngine::createSyncObjects() {
     }
 }
 
+void EngineCore::MioEngine::loadModel() {
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string warn, err;
+
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
+        throw std::runtime_error(warn + err);
+    }
+
+    for(const auto& shape : shapes) {
+        for (const auto& index : shape.mesh.indices) {
+            Vertex vertex{};
+            vertex.pos = {
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
+            };
+            vertex.color = {1.0f, 1.0f, 1.0f};
+            vertex.texCoord = {
+                attrib.texcoords[2 * index.texcoord_index + 0],
+                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+            };
+            m_vertices.push_back(vertex);
+            m_indices.push_back(m_indices.size());
+        }
+    }
+}
+
 void EngineCore::MioEngine::createVertexBuffer() {
-    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+    VkDeviceSize bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
@@ -1223,7 +1259,7 @@ void EngineCore::MioEngine::createVertexBuffer() {
 
     void* data;
     vkMapMemory(m_logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices.data(), (size_t)bufferSize);
+    memcpy(data, m_vertices.data(), (size_t)bufferSize);
     vkUnmapMemory(m_logicalDevice, stagingBufferMemory);
 
     createBuffer(m_vertexBuffer, m_vertexBufferMemory, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -1234,7 +1270,7 @@ void EngineCore::MioEngine::createVertexBuffer() {
 }
 
 void EngineCore::MioEngine::createIndexBuffer() {
-    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+    VkDeviceSize bufferSize = sizeof(m_indices[0]) * m_indices.size();
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
@@ -1242,7 +1278,7 @@ void EngineCore::MioEngine::createIndexBuffer() {
 
     void* data;
     vkMapMemory(m_logicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, indices.data(), (size_t)bufferSize);
+    memcpy(data, m_indices.data(), (size_t)bufferSize);
     vkUnmapMemory(m_logicalDevice, stagingBufferMemory);
 
     createBuffer(m_indexBuffer, m_indexBufferMemory, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -1380,7 +1416,7 @@ void EngineCore::MioEngine::createDepthResources(){
  */
 void EngineCore::MioEngine::createTextureImage() {
     int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load("F:\\Code\\VulkanTest\\textures\\statue.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * texHeight * 4;
 
     if (!pixels) {
@@ -1574,7 +1610,7 @@ void EngineCore::MioEngine::recordCommandBuffer(VkCommandBuffer commandBuffer, u
     VkBuffer vertexBuffers[] = {m_vertexBuffer};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindIndexBuffer(commandBuffer, m_indexBuffer, 0, VK_INDEX_TYPE_UINT32);
     
     VkViewport viewport = {
         .x = 0.0f,
@@ -1593,7 +1629,7 @@ void EngineCore::MioEngine::recordCommandBuffer(VkCommandBuffer commandBuffer, u
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
     //vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, &m_descriptorSets[m_currentFrame], 0, nullptr);
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_indices.size()), 1, 0, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -1823,10 +1859,10 @@ void EngineCore::MioEngine::updateUniformBuffer(uint32_t currentImage){
 }
 
 void EngineCore::MioEngine::drawFrame(){
-    vkWaitForFences(m_logicalDevice, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+    vkWaitForFences(m_logicalDevice, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, (std::numeric_limits<uint64_t>::max)());
 
     uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, std::numeric_limits<uint64_t>::max(), m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult result = vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, (std::numeric_limits<uint64_t>::max)(), m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) { //表示当前交换链内的图像格式不在适用于下一张图片尺寸，所以需要重建交换链
         recreateSwapChain();
         return;

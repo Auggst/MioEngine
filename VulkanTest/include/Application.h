@@ -11,6 +11,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <Vetex.h>
+
 
 namespace EngineCore{
 struct MioInfo{
@@ -72,6 +74,7 @@ private:
     void createCommandPool();
     void createCommandBuffers();
     void createSyncObjects();
+    void loadModel();
     void createVertexBuffer();
     void createIndexBuffer();
     void createUniformBuffers();
@@ -144,6 +147,8 @@ private:
     std::vector<VkDeviceMemory> m_uniformBuffersMemory;
     std::vector<void*> m_uninformBuffersMapped;
     std::vector<VkDescriptorSet> m_descriptorSets;
+    std::vector<Vertex> m_vertices;
+    std::vector<uint32_t> m_indices;
 };
 
 }
