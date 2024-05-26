@@ -33,8 +33,8 @@
 const uint32_t WIDTH = 800;  // 窗口大小800x600
 const uint32_t HEIGHT = 600; // 窗口大小800x600
 
-const std::string MODEL_PATH = "F:\\Code\\VulkanTest\\models\\viking_room\\viking_room.obj";
-const std::string TEXTURE_PATH = "F:\\Code\\VulkanTest\\textures\\viking_room.png";
+const std::string MODEL_PATH = "E:\\Projects\\VulkanTest\\models\\viking_room\\viking_room.obj";
+const std::string TEXTURE_PATH = "E:\\Projects\\VulkanTest\\textures\\viking_room.png";
 
 const int MAX_FRAMES_IN_FLIGHT = 2; // 2帧
 const std::vector<const char*> validationLayers = {
@@ -943,7 +943,7 @@ void EngineCore::MioEngine::createDescriptorSetLayout() {
  */
 void EngineCore::MioEngine::createGraphicsPipeline() {
     //可编程管线部分
-    std::string path = "F:/Code/VulkanTest/";
+    std::string path = "E:/Projects/VulkanTest/";
     auto vertShaderCode = EngineUtils::readFile((path + "shader/vert.spv").c_str());
     auto fragShaderCode = EngineUtils::readFile((path + "shader/frag.spv").c_str());
 
