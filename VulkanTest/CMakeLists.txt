@@ -17,6 +17,9 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
+# 假设 GLFW 和其他依赖库的头文件和库文件都在项目目录下的 env 文件夹中
+set(ENV_DIR ${CMAKE_SOURCE_DIR}/Env)
+
 # 找到Vulkan SDK的路径，CMake通常可以自动找到
 find_package(Vulkan REQUIRED)
 
@@ -37,5 +40,9 @@ target_link_libraries(MioEngine PRIVATE Vulkan::Vulkan)
 
 # 链接GLFW库
 ## 指定GLFW库的位置
-set(GLFW_LIBRARY "F:/EnvironmentDev/glfw-3.3.8/glfw-3.3.8.bin.WIN64/lib-vc2022/glfw3.lib")
+set(GLFW_LIBRARY "${ENV_DIR}/lib/glfw3.lib")
 target_link_libraries(MioEngine PRIVATE ${GLFW_LIBRARY})
+
+# 链接Assimp库
+set(ASSIMP_LIBRARY "${ENV_DIR}/lib/assimp-vc143-mt.lib")
+target_link_libraries(EngineApp PRIVATE ${ASSIMP_LIBRARY})

@@ -4,12 +4,18 @@
 #include <array>
 
 #include <glm/glm.hpp>
-
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
 namespace EngineCore{
 struct Vertex{
     glm::vec3 pos;
     glm::vec3 color;
     glm::vec2 texCoord;
+
+    bool operatoor==(const Vertex& other) const{
+        return pos == other.pos && color == other.color && texCoord == other.texCoord;
+    }
+
     static VkVertexInputBindingDescription getBindingDescriptions() {
         VkVertexInputBindingDescription bindingDescription = {
             .binding = 0,
@@ -40,4 +46,14 @@ struct Vertex{
         return attributeDescriptions;
     }
 };
+}
+
+namespace std{
+    template<> struct hash<EngineCore::Vertex> {
+        size_t operator()(EngineCore::Vertex const& vertex) const {
+            return ((hash<glm::vec3>()(vertex.pos) ^
+                    (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+                    (hash<glm::vec2>()(vertex.texCoord) << 1);
+        }
+    }
 }

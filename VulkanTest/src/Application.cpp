@@ -7,6 +7,7 @@
 #include <limits>
 #include <algorithm>
 #include <chrono>
+#include <unordered_map>
 
 #include <utils.h>
 #include <UniformBuffer.h>
@@ -1230,6 +1231,7 @@ void EngineCore::MioEngine::loadModel() {
     if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
         throw std::runtime_error(warn + err);
     }
+    std::unordered_map<Vertex, uint32_t> uniqueVertices{};
 
     for(const auto& shape : shapes) {
         for (const auto& index : shape.mesh.indices) {
@@ -1244,8 +1246,14 @@ void EngineCore::MioEngine::loadModel() {
                 attrib.texcoords[2 * index.texcoord_index + 0],
                 1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
             };
-            m_vertices.push_back(vertex);
-            m_indices.push_back(m_indices.size());
+            // m_vertices.push_back(vertex);
+            // m_indices.push_back(m_indices.size());
+            if (uniqueVertices.count(vertex) == 0) {
+                uniqueVertices[vertex] = static_cast<uint32_t>(m_vertices.size());
+                m_vertices.push_back(vertex);
+            }
+
+            m_indices.push_back(uniqueVertices[vertex]);
         }
     }
 }
